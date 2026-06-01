@@ -1,0 +1,438 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# The Circle – Home Assistant Package
+# ═══════════════════════════════════════════════════════════════════════════
+# Place this file in your HA config/packages/ directory.
+# It provides:
+#   1. Template sensors for clock angles (hour/min/sec → 0-360°)
+#   2. Scripts to configure preset profiles via ESPHome services
+#
+# Ref: HA packages documentation
+#   https://www.home-assistant.io/docs/configuration/packages/
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Template sensors: real-time clock angles ──────────────────────────────
+# These convert current time to angles (0° = 12 o'clock, clockwise).
+# Updated every second. Bound to dot primitives for clock display.
+#
+# Hour: 12h mapped to 360° (each hour = 30°, minutes add sub-degree precision)
+# Minute: 60min mapped to 360° (each minute = 6°)
+# Second: 60sec mapped to 360° (each second = 6°)
+
+template:
+  - sensor:
+      # ── Hour angle (0–360, smooth with minute interpolation) ──────────
+      - name: "The Circle Clock Hour Angle"
+        unique_id: the_circle_clock_hour_angle
+        unit_of_measurement: "°"
+        state: >-
+          {{ ((now().hour % 12) * 30 + now().minute * 0.5) | round(1) }}
+        icon: mdi:clock-outline
+
+      # ── Minute angle (0–360) ─────────────────────────────────────────
+      - name: "The Circle Clock Min Angle"
+        unique_id: the_circle_clock_min_angle
+        unit_of_measurement: "°"
+        state: >-
+          {{ (now().minute * 6 + now().second * 0.1) | round(1) }}
+        icon: mdi:clock-outline
+
+      # ── Second angle (0–360) ─────────────────────────────────────────
+      - name: "The Circle Clock Sec Angle"
+        unique_id: the_circle_clock_sec_angle
+        unit_of_measurement: "°"
+        state: >-
+          {{ (now().second * 6) | round(1) }}
+        icon: mdi:clock-outline
+
+# ── Scripts: preset profile configurations ────────────────────────────────
+# Each script configures one profile by calling ESPHome services.
+# After configuration, call save_profiles to persist to flash.
+#
+# Primitive type IDs:
+#   0=none, 1=dot, 2=arc, 3=trail, 4=solid, 5=gradient,
+#   6=segment, 7=pulse, 8=spin, 9=rainbow, 10=strobe,
+#   11=sparkle, 12=comet, 13=threshold
+
+script:
+  # ════════════════════════════════════════════════════════════════════════
+  # Preset: Profile 0 – Spento (Off)
+  # All strips black, no layers.
+  # ════════════════════════════════════════════════════════════════════════
+  the_circle_preset_off:
+    alias: "The Circle – Preset Off"
+    description: "Clear all layers on profile 0"
+    sequence:
+      - repeat:
+          count: 3
+          sequence:
+            - repeat:
+                count: 6
+                sequence:
+                  - action: esphome.the_circle_clear_layer
+                    data:
+                      profile: 0
+                      strip: "{{ repeat.outer.index - 1 }}"
+                      layer: "{{ repeat.index - 1 }}"
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Preset: Profile 1 – Orologio (Clock)
+  # Inner Aura: hour dot (red, spread=3) + minute dot (green) + second dot (blue)
+  # Inner Glow: rainbow
+  #
+  # Ref: Original effect "Clock Hour Dot Min Dot Sec Dot"
+  # ════════════════════════════════════════════════════════════════════════
+  the_circle_preset_clock:
+    alias: "The Circle – Preset Clock"
+    description: "Clock with hour/min/sec dots on Inner Aura, rainbow on Inner Glow"
+    sequence:
+      # ── Inner Aura Layer 0: Hour dot (red, spread=3) ──────────────
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 1
+          strip: 0
+          layer: 0
+          type: 1              # dot
+          color_r: 255
+          color_g: 0
+          color_b: 0
+          param0: 0            # angle (overridden by entity)
+          param1: 3            # spread: 3 LEDs each side
+          param2: 0
+          param3: 0
+          entity_id: "sensor.the_circle_clock_hour_angle"
+          value_min: 0
+          value_max: 360
+          intensity: 255
+
+      # ── Inner Aura Layer 1: Minute dot (green, spread=1) ──────────
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 1
+          strip: 0
+          layer: 1
+          type: 1              # dot
+          color_r: 0
+          color_g: 255
+          color_b: 0
+          param0: 0
+          param1: 1            # spread: 1 LED each side
+          param2: 0
+          param3: 0
+          entity_id: "sensor.the_circle_clock_min_angle"
+          value_min: 0
+          value_max: 360
+          intensity: 255
+
+      # ── Inner Aura Layer 2: Second dot (blue, spread=0) ───────────
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 1
+          strip: 0
+          layer: 2
+          type: 1              # dot
+          color_r: 0
+          color_g: 0
+          color_b: 255
+          param0: 0
+          param1: 0            # single LED
+          param2: 0
+          param3: 0
+          entity_id: "sensor.the_circle_clock_sec_angle"
+          value_min: 0
+          value_max: 360
+          intensity: 200
+
+      # ── Inner Glow Layer 0: Rainbow ───────────────────────────────
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 1
+          strip: 2
+          layer: 0
+          type: 9              # rainbow
+          color_r: 255
+          color_g: 255
+          color_b: 255
+          param0: 5            # 5 RPM
+          param1: 0
+          param2: 0
+          param3: 0
+          entity_id: ""
+          value_min: 0
+          value_max: 100
+          intensity: 200
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Preset: Profile 2 – Orologio + Pulse
+  # Same as clock, plus Outer Aura: pulse white
+  # ════════════════════════════════════════════════════════════════════════
+  the_circle_preset_clock_pulse:
+    alias: "The Circle – Preset Clock + Pulse"
+    description: "Clock on Inner Aura, pulse on Outer Aura, rainbow on Inner Glow"
+    sequence:
+      # First run the clock preset for profile 2
+      # (duplicate the layers since it's a different profile)
+
+      # ── Inner Aura: same clock layers ─────────────────────────────
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 2
+          strip: 0
+          layer: 0
+          type: 1
+          color_r: 255
+          color_g: 0
+          color_b: 0
+          param0: 0
+          param1: 3
+          param2: 0
+          param3: 0
+          entity_id: "sensor.the_circle_clock_hour_angle"
+          value_min: 0
+          value_max: 360
+          intensity: 255
+
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 2
+          strip: 0
+          layer: 1
+          type: 1
+          color_r: 0
+          color_g: 255
+          color_b: 0
+          param0: 0
+          param1: 1
+          param2: 0
+          param3: 0
+          entity_id: "sensor.the_circle_clock_min_angle"
+          value_min: 0
+          value_max: 360
+          intensity: 255
+
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 2
+          strip: 0
+          layer: 2
+          type: 1
+          color_r: 0
+          color_g: 0
+          color_b: 255
+          param0: 0
+          param1: 0
+          param2: 0
+          param3: 0
+          entity_id: "sensor.the_circle_clock_sec_angle"
+          value_min: 0
+          value_max: 360
+          intensity: 200
+
+      # ── Outer Aura Layer 0: Pulse (white) ─────────────────────────
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 2
+          strip: 1
+          layer: 0
+          type: 7              # pulse
+          color_r: 255
+          color_g: 255
+          color_b: 255
+          param0: 30           # 30 cycles/min
+          param1: 0.1          # min brightness
+          param2: 1.0          # max brightness
+          param3: 0
+          entity_id: ""
+          value_min: 0
+          value_max: 100
+          intensity: 180
+
+      # ── Inner Glow Layer 0: Rainbow ───────────────────────────────
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 2
+          strip: 2
+          layer: 0
+          type: 9
+          color_r: 255
+          color_g: 255
+          color_b: 255
+          param0: 5
+          param1: 0
+          param2: 0
+          param3: 0
+          entity_id: ""
+          value_min: 0
+          value_max: 100
+          intensity: 200
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Preset: Profile 3 – Energia (Energy)
+  # Inner Aura: 4-segment proportional (consumo/produzione/prelievo/immissione)
+  #
+  # Ref: Original "Energy" effect
+  # ════════════════════════════════════════════════════════════════════════
+  the_circle_preset_energy:
+    alias: "The Circle – Preset Energy"
+    description: "Energy distribution as 4 proportional segments"
+    sequence:
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 3
+          strip: 0
+          layer: 0
+          type: 6              # segment
+          color_r: 255         # consumo: red
+          color_g: 0
+          color_b: 0
+          param0: 0            # segment values come from HA
+          param1: 0
+          param2: 0
+          param3: 0
+          entity_id: "sensor.consumo"
+          value_min: 0
+          value_max: 10000
+          intensity: 255
+
+      # Set additional segment colors via set_layer_color
+      # Color 1 (produzione): green
+      - action: esphome.the_circle_set_layer_color
+        data:
+          profile: 3
+          strip: 0
+          layer: 0
+          color_index: 1
+          r: 0
+          g: 255
+          b: 0
+
+      # Color 2 (prelievo): blue
+      - action: esphome.the_circle_set_layer_color
+        data:
+          profile: 3
+          strip: 0
+          layer: 0
+          color_index: 2
+          r: 0
+          g: 0
+          b: 255
+
+      # Color 3 (immissione): yellow
+      - action: esphome.the_circle_set_layer_color
+        data:
+          profile: 3
+          strip: 0
+          layer: 0
+          color_index: 3
+          r: 255
+          g: 255
+          b: 0
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Preset: Profile 4 – Cottura (Oven Progress)
+  # Inner Aura: trail showing oven cooking progress with gradient
+  #
+  # Ref: Original "Oven Progress" effect
+  # ════════════════════════════════════════════════════════════════════════
+  the_circle_preset_oven:
+    alias: "The Circle – Preset Oven Progress"
+    description: "Oven progress as gradient trail with threshold colors"
+    sequence:
+      # Trail bound to oven progress (0–100%)
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 4
+          strip: 0
+          layer: 0
+          type: 3              # trail
+          color_r: 0
+          color_g: 255
+          color_b: 0
+          param0: 0
+          param1: 0
+          param2: 0
+          param3: 0
+          entity_id: "sensor.forno_program_progress"
+          value_min: 0
+          value_max: 100
+          intensity: 255
+
+      # Threshold: green → yellow → red as cooking progresses
+      - action: esphome.the_circle_set_threshold
+        data:
+          profile: 4
+          strip: 0
+          layer: 0
+          enabled: 1
+          threshold1: 33
+          threshold2: 66
+          r0: 0
+          g0: 255
+          b0: 0
+          r1: 255
+          g1: 255
+          b1: 0
+          r2: 255
+          g2: 0
+          b2: 0
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Preset: Profile 5 – Lavastoviglie (Dishwasher Progress)
+  # Inner Aura: trail showing dishwasher progress
+  #
+  # Ref: Original "Dishwasher Progress" effect
+  # ════════════════════════════════════════════════════════════════════════
+  the_circle_preset_dishwasher:
+    alias: "The Circle – Preset Dishwasher"
+    description: "Dishwasher progress as trail"
+    sequence:
+      - action: esphome.the_circle_configure_layer
+        data:
+          profile: 5
+          strip: 0
+          layer: 0
+          type: 3              # trail
+          color_r: 0
+          color_g: 128
+          color_b: 255
+          param0: 0
+          param1: 0
+          param2: 0
+          param3: 0
+          entity_id: "sensor.lavastoviglie_program_progress"
+          value_min: 0
+          value_max: 100
+          intensity: 255
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Master: configure all presets + save
+  # ════════════════════════════════════════════════════════════════════════
+  the_circle_setup_all_presets:
+    alias: "The Circle – Setup All Presets"
+    description: "Configure all 6 preset profiles and save to flash"
+    sequence:
+      - action: script.turn_on
+        target:
+          entity_id: script.the_circle_preset_off
+      - delay: "00:00:01"
+      - action: script.turn_on
+        target:
+          entity_id: script.the_circle_preset_clock
+      - delay: "00:00:01"
+      - action: script.turn_on
+        target:
+          entity_id: script.the_circle_preset_clock_pulse
+      - delay: "00:00:01"
+      - action: script.turn_on
+        target:
+          entity_id: script.the_circle_preset_energy
+      - delay: "00:00:01"
+      - action: script.turn_on
+        target:
+          entity_id: script.the_circle_preset_oven
+      - delay: "00:00:01"
+      - action: script.turn_on
+        target:
+          entity_id: script.the_circle_preset_dishwasher
+      - delay: "00:00:02"
+      # Save all profiles to flash
+      - action: esphome.the_circle_save_profiles
