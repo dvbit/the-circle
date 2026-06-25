@@ -14,7 +14,7 @@
 |-------|------|------|------|-------|
 | Inner Aura | SK9822 | 263 | D16/D17 (SPI) | 0 |
 | Outer Aura | APA102 | 132 | D19/D18 (SPI) | 1 |
-| Inner Glow | SK6812 RGBW | 111 | D26 | 2 |
+| Inner Glow | SK6812 RGBW | 111 | GPIO26 (RMT) | 2 |
 
 All strips start at 12-o'clock (0°) and run clockwise to 360°.
 
@@ -140,13 +140,15 @@ light:
     name: "Outer Aura"
     default_transition_length: 0s
 
-  - platform: neopixelbus
-    type: GRBW
-    pin: GPIO26
-    variant: SK6812
-    num_leds: 111
-    name: "Inner Glow"
+  # Inner Glow: clockless SK6812 RGBW via RMT (neopixelbus deprecato su ESP32)
+  - platform: esp32_rmt_led_strip
     id: i_g
+    pin: GPIO26
+    num_leds: 111
+    chipset: SK6812
+    rgb_order: GRB
+    is_rgbw: true
+    name: "Inner Glow"
     default_transition_length: 0s
 
 the_circle:
@@ -155,7 +157,7 @@ the_circle:
     - light_id: i_a
     - light_id: o_a
     - light_id: i_g
-  num_profiles: 6
+  num_profiles: 20
   layers_per_strip: 6
 ```
 
@@ -410,6 +412,20 @@ This component was designed from the following consolidated requirement:
 - **Controls**: capacitive touch (profile navigation, brightness), web UI (full parameter config), HA services (programmatic configuration)
 - **Persistence**: profile configurations survive reboot via ESP32 NVS flash preferences
 - **~60fps rendering** with 16ms throttle
+
+---
+
+## Changelog
+
+### v1.1
+- **Inner Glow migrated `neopixelbus` → `esp32_rmt_led_strip`.** On ESP32, `neopixelbus` is deprecated as of ESPHome 2026.6 (removal no later than 2027.1; it does not build on ESP-IDF 6). The official migration path for clockless SK6812/WS2812 strips is `esp32_rmt_led_strip` (RMT peripheral). The `the_circle` component is backend-agnostic (it resolves an `AddressableLight` from the `LightState`), so this change is transparent to all primitives.
+- **Fixed GPIO27 pin conflict.** GPIO27 was assigned both to the LD2410 UART `tx_pin` and to the "Touch Esc" pad. Touch Esc moved to GPIO13 (touch channel T4); GPIO27 stays with the radar UART.
+- **`esp32_touch` calibration notes.** Documented the unified touch driver (ESP-IDF v5.5, ESPHome 2026.3) and the V1 threshold semantics (raw value decreases on touch on the classic ESP32), plus the `setup_mode` calibration procedure.
+- **Canonical firmware versioning** via `esphome.project` (`dvbit.the-circle`, version `1.1`).
+- **YAML hygiene**: lowercase booleans, clarifying comments referencing the official docs.
+- Validated against **ESPHome 2026.6.2** (current stable).
+
+> **Technical note:** the component resolves the addressable buffer with a `static_cast<light::AddressableLight *>`. All three configured strips are addressable, so this is safe; if you bind a non-addressable light a `dynamic_cast` guard would be required.
 
 ---
 

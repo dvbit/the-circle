@@ -18,6 +18,11 @@ esphome:
   name: the-circle
   area: Pranzo
   friendly_name: The Circle
+  # Versioning canonico del firmware (esposto a HA come attributo del device).
+  # Ref: https://esphome.io/components/esphome/  (project: name/version)
+  project:
+    name: "dvbit.the-circle"
+    version: "1.1"
 
 esp32:
   board: esp32dev
@@ -127,14 +132,22 @@ light:
     color_correct: [0.6, 0.6, 0.6]
 
   # ── Inner Glow (SK6812 RGBW, 111 LEDs) ──────────────────────────────
-  - platform: neopixelbus
-    type: GRBW
-    icon: 'mdi:radiobox-blank'
-    pin: GPIO26
-    variant: SK6812
-    num_leds: ${i_g_n_l}
-    name: "Inner Glow"
+  # MIGRAZIONE 2026.6: neopixelbus è DEPRECATO su ESP32 (rimozione ≤ 2027.1,
+  # non compila su ESP-IDF 6). Percorso ufficiale per clockless SK6812/WS2812:
+  # esp32_rmt_led_strip. Ref: https://esphome.io/components/light/neopixelbus/
+  #   "Clockless lights (WS2811, WS2812, SK6812, etc.) → Esp32 Rmt Led Strip"
+  # Note sintassi RMT5 (2026.x): NON usare 'rmt_channel' (era RMT4, ora il canale
+  # è auto-allocato). is_rgbw:true espone il 4° canale bianco del SK6812.
+  # Ref: https://esphome.io/components/light/esp32_rmt_led_strip/
+  - platform: esp32_rmt_led_strip
     id: i_g
+    icon: 'mdi:radiobox-blank'
+    name: "Inner Glow"
+    pin: GPIO26
+    num_leds: ${i_g_n_l}
+    chipset: SK6812         # timing standard SK6812 (selezione automatica)
+    rgb_order: GRB          # SK6812 GRBW: ordine colori GRB + canale W
+    is_rgbw: true           # abilita il canale bianco dedicato
     default_transition_length: 0s
     color_correct: [0.6, 0.6, 0.6]
 
@@ -256,8 +269,16 @@ rtttl:
   output: buzzer_output
 
 # ── Capacitive touch ─────────────────────────────────────────────────────
+# Driver: da 2026.3 esp32_touch usa il driver unificato ESP-IDF v5.5
+# (esp_driver_touch_sens). Su ESP32 "classic" (hardware V1, board esp32dev)
+# la SEMANTICA resta invariata: il valore raw DIMINUISCE al tocco, quindi il
+# binary_sensor scatta quando value < threshold. (Su S2/S3 sarebbe il contrario.)
+# CALIBRAZIONE: per tarare le soglie imposta temporaneamente setup_mode: true,
+# osserva i valori nei log toccando/rilasciando ogni pad, scegli un valore tra
+# "toccato" e "non toccato", poi rimetti setup_mode: false.
+# Ref: https://esphome.io/components/binary_sensor/esp32_touch/
 esp32_touch:
-  setup_mode: False
+  setup_mode: false
 
 binary_sensor:
   # ── Presence ──────────────────────────────────────────────────────────
@@ -289,7 +310,10 @@ binary_sensor:
   - platform: esp32_touch
     name: "Touch Esc"
     id: touch_esc
-    pin: GPIO27
+    # FIX conflitto pin: GPIO27 è già il tx_pin dell'UART LD2410 (vedi uart:).
+    # Spostato su GPIO13 (touch channel T4), libero e touch-capable.
+    # Pin touch ESP32 V1: 0,2,4,12,13,14,15,27,32,33. Usati: 2,12,15.
+    pin: GPIO13
     threshold: 300
   - platform: status
     name: Status
@@ -335,7 +359,7 @@ text_sensor:
 # ── BLE Proxy ─────────────────────────────────────────────────────────────
 esp32_ble_tracker:
   scan_parameters:
-    continuous: False
+    continuous: false
     active: true
     interval: 320ms
     window: 300ms
