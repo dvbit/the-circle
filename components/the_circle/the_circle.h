@@ -80,16 +80,23 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
   void setup() override {
     ESP_LOGI("the_circle", "Setting up The Circle component");
 
-    // Resolve AddressableLight pointers from LightState
+    // Resolve AddressableLight pointers from LightState.
+    // Use dynamic_cast as a defensive guard: if a non-addressable light is ever
+    // bound to a strip (e.g. a plain RGB/monochromatic light), the cast yields
+    // nullptr instead of undefined behaviour, and we log + skip that strip.
     for (int i = 0; i < MAX_STRIPS; i++) {
       if (this->light_states_[i] != nullptr) {
-        // Get the output, which should be an AddressableLight
         auto *output = this->light_states_[i]->get_output();
         this->lights_[i] =
-            static_cast<light::AddressableLight *>(output);
-        if (this->lights_[i]) {
+            dynamic_cast<light::AddressableLight *>(output);
+        if (this->lights_[i] != nullptr) {
           this->num_leds_[i] = this->lights_[i]->size();
           ESP_LOGI("the_circle", "Strip %d: %d LEDs", i, this->num_leds_[i]);
+        } else {
+          // Misconfiguration: bound light is not addressable.
+          this->num_leds_[i] = 0;
+          ESP_LOGE("the_circle",
+                   "Strip %d: bound light is NOT addressable; strip disabled", i);
         }
       }
     }

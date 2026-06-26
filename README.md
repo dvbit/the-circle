@@ -417,6 +417,10 @@ This component was designed from the following consolidated requirement:
 
 ## Changelog
 
+### v1.2
+- **`dynamic_cast` guard for strip binding.** The component now resolves each strip's `AddressableLight` with a `dynamic_cast` instead of `static_cast`. If a non-addressable light is ever bound, the cast yields `nullptr`, the strip is logged as an error and disabled, and the render loop safely skips it (no undefined behaviour).
+- **Entity label translations (EN/FR/IT/ES/DE).** Added `translations/` with a reference label map for every user-facing entity, plus usage notes (`translations/README.md`). ESPHome does not localize entity `name:` at runtime, so these are reference maps for renaming entities in Home Assistant consistently.
+
 ### v1.1
 - **Inner Glow migrated `neopixelbus` → `esp32_rmt_led_strip`.** On ESP32, `neopixelbus` is deprecated as of ESPHome 2026.6 (removal no later than 2027.1; it does not build on ESP-IDF 6). The official migration path for clockless SK6812/WS2812 strips is `esp32_rmt_led_strip` (RMT peripheral). The `the_circle` component is backend-agnostic (it resolves an `AddressableLight` from the `LightState`), so this change is transparent to all primitives.
 - **Fixed GPIO27 pin conflict.** GPIO27 was assigned both to the LD2410 UART `tx_pin` and to the "Touch Esc" pad. Touch Esc moved to GPIO13 (touch channel T4); GPIO27 stays with the radar UART.

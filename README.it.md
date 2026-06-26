@@ -161,6 +161,18 @@ Il componente è stato progettato a partire dal requisito consolidato seguente:
 
 ## Changelog
 
+### v1.2
+- **Guardia `dynamic_cast` per il binding delle strip.** Il componente risolve
+  l'`AddressableLight` di ogni strip con `dynamic_cast` invece di `static_cast`.
+  Se viene legato un light non-addressable, il cast restituisce `nullptr`, la
+  strip viene segnalata come errore e disabilitata, e il render loop la salta in
+  sicurezza (nessun comportamento indefinito).
+- **Traduzioni etichette entità (EN/FR/IT/ES/DE).** Aggiunta la cartella
+  `translations/` con la mappa di riferimento delle etichette per ogni entità
+  visibile, più note d'uso (`translations/README.md`). ESPHome non localizza i
+  `name:` a runtime, quindi sono mappe di riferimento per rinominare le entità in
+  Home Assistant in modo coerente.
+
 ### v1.1
 - **Inner Glow migrato da `neopixelbus` a `esp32_rmt_led_strip`.** Su ESP32
   `neopixelbus` è deprecato da ESPHome 2026.6 (rimozione non oltre 2027.1; non
