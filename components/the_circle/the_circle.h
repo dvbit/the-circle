@@ -22,6 +22,7 @@
 #include "esphome/core/preferences.h"
 #include "esphome/components/api/custom_api_device.h"
 #include "esphome/components/light/addressable_light.h"
+#include "esphome/core/string_ref.h"
 
 #include "primitive.h"
 #include "profile.h"
@@ -675,30 +676,39 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
    *
    * Ref: subscribe_homeassistant_state callback: (std::string entity_id, std::string state)
    */
-  void on_ha_state_changed_(std::string entity_id, std::string state) {
+  // Callback stato HA – firma moderna (const std::string &, StringRef).
+  // Migrata dalla vecchia (std::string, std::string) deprecata (rimozione
+  // 2027.1.0). StringRef è null-terminated: .c_str() è sicuro; supporta ==
+  // e .empty(). Ref: custom_api_device.h (overload StringRef).
+  void on_ha_state_changed_(const std::string &entity_id, StringRef state) {
     // Parse value: numeric first, then string mapping
     float val = 0.0f;
     bool parsed = false;
 
-    // Skip unavailable/unknown early
+    // Skip unavailable/unknown early (StringRef supporta ==)
     if (state == "unavailable" || state == "unknown") {
       val = -1.0f;
       parsed = true;
     }
 
     if (!parsed) {
-      // Try numeric parse
+      // Try numeric parse (StringRef è null-terminated → c_str() sicuro)
+      const char *cstr = state.c_str();
       char *end = nullptr;
-      float numeric = strtof(state.c_str(), &end);
-      if (end != state.c_str() && (*end == '\0' || *end == ' ')) {
+      float numeric = strtof(cstr, &end);
+      if (end != cstr && (*end == '\0' || *end == ' ')) {
         val = numeric;
         parsed = true;
       }
     }
 
+    // Costruzione della std::string solo se serve (mapping/salvataggio):
+    // per i rami numerici sopra evitiamo l'allocazione.
+    std::string state_str;
     if (!parsed) {
-      // String state → float mapping
-      val = map_string_state(state);
+      // String state → float mapping (map_string_state richiede std::string)
+      state_str = std::string(state.c_str());
+      val = map_string_state(state_str);
     }
 
     ESP_LOGD("the_circle", "HA state: %s = %s → %.2f",
@@ -715,8 +725,10 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
 
       // Update the primitive's ha_value
       ly.primitive->ha_value = val;
-      // Also store raw string for potential future use
-      ly.primitive->ha_state_str = state;
+      // Also store raw string for potential future use.
+      // Riusa state_str se già costruita, altrimenti costruiscila una volta.
+      if (state_str.empty()) state_str = std::string(state.c_str());
+      ly.primitive->ha_state_str = state_str;
     }
   }
 };
