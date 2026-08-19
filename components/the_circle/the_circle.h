@@ -29,6 +29,7 @@
 #include "storage.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -307,7 +308,10 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
   /**
    * Switch active profile (public, called by ActiveProfileSelect and service).
    */
-  void on_set_profile(int profile_index) {
+  // NB #14470: i parametri int dei servizi registrati via register_service()
+  // devono essere int32_t — ESPHome definisce get_execute_arg_value/
+  // to_service_arg_type solo per <int32_t>, non <int>. Vedi README.
+  void on_set_profile(int32_t profile_index) {
     if (profile_index < 0 || profile_index >= this->num_profiles_) {
       ESP_LOGW("the_circle", "Invalid profile index %d", profile_index);
       return;
@@ -336,13 +340,13 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
    *   2. Sets its color, params, intensity
    *   3. Optionally binds to an HA entity
    */
-  void on_configure_layer(int profile, int strip, int layer, int type,
-                          int color_r, int color_g, int color_b,
+  void on_configure_layer(int32_t profile, int32_t strip, int32_t layer, int32_t type,
+                          int32_t color_r, int32_t color_g, int32_t color_b,
                           float param0, float param1,
                           float param2, float param3,
                           std::string entity_id,
                           float value_min, float value_max,
-                          int intensity) {
+                          int32_t intensity) {
     if (!validate_indices(profile, strip, layer)) return;
 
     // Remove any existing bindings for this layer before reconfiguring
@@ -386,8 +390,8 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
    * Set a specific color slot on a layer.
    * Ref: service the_circle.set_layer_color
    */
-  void on_set_layer_color(int profile, int strip, int layer,
-                          int color_index, int r, int g, int b) {
+  void on_set_layer_color(int32_t profile, int32_t strip, int32_t layer,
+                          int32_t color_index, int32_t r, int32_t g, int32_t b) {
     if (!validate_indices(profile, strip, layer)) return;
     if (color_index < 0 || color_index >= MAX_COLORS) return;
 
@@ -401,11 +405,11 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
    * Configure threshold modifier on a layer.
    * Ref: service the_circle.set_threshold
    */
-  void on_set_threshold(int profile, int strip, int layer,
-                        int enabled, float threshold1, float threshold2,
-                        int r0, int g0, int b0,
-                        int r1, int g1, int b1,
-                        int r2, int g2, int b2) {
+  void on_set_threshold(int32_t profile, int32_t strip, int32_t layer,
+                        int32_t enabled, float threshold1, float threshold2,
+                        int32_t r0, int32_t g0, int32_t b0,
+                        int32_t r1, int32_t g1, int32_t b1,
+                        int32_t r2, int32_t g2, int32_t b2) {
     if (!validate_indices(profile, strip, layer)) return;
 
     auto &ly = this->profiles_[profile].layers[strip][layer];
@@ -423,7 +427,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
    * Clear (remove) a layer.
    * Ref: service the_circle.clear_layer
    */
-  void on_clear_layer(int profile, int strip, int layer) {
+  void on_clear_layer(int32_t profile, int32_t strip, int32_t layer) {
     if (!validate_indices(profile, strip, layer)) return;
     // Remove bindings before clearing the layer
     remove_bindings_for(profile, strip, layer);
@@ -435,7 +439,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
    * Bind (or rebind) an HA entity to an existing layer.
    * Ref: service the_circle.bind_entity
    */
-  void on_bind_entity(int profile, int strip, int layer,
+  void on_bind_entity(int32_t profile, int32_t strip, int32_t layer,
                       std::string entity_id,
                       float value_min, float value_max) {
     if (!validate_indices(profile, strip, layer)) return;
@@ -475,7 +479,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
    * Rename a profile.
    * Ref: service the_circle.rename_profile
    */
-  void on_rename_profile(int profile, std::string name) {
+  void on_rename_profile(int32_t profile, std::string name) {
     if (profile < 0 || profile >= this->num_profiles_) return;
     this->profiles_[profile].set_name(name.c_str());
     ESP_LOGI("the_circle", "Profile %d renamed to: %s", profile, name.c_str());

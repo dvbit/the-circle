@@ -22,7 +22,7 @@ esphome:
   # Ref: https://esphome.io/components/esphome/ (project: name/version)
   project:
     name: "dvbit.the-circle"
-    version: "1.3"
+    version: "1.4"
 
 esp32:
   board: esp32dev
@@ -72,25 +72,6 @@ api:
     key: "fpH+HCqYyRJ7D14B3IEmKf9YrDrzIEhtMQ9ppbu6N14="
   custom_services: true
   homeassistant_states: true
-  # ── WORKAROUND ESPHome #14470 (obbligatorio) ─────────────────────────────
-  # I servizi di The Circle sono registrati da C++ con register_service()
-  # (via custom_services). Da PR #9451 ESPHome compila le specializzazioni
-  # get_execute_arg_value<T>/to_service_arg_type<T> in user_services.cpp SOLO
-  # se un'azione YAML usa quei tipi. Senza questo blocco il link fallisce con
-  # "undefined reference to get_execute_arg_value<int>" ecc.
-  # Questa azione fittizia dichiara int/float/string (i tipi usati dai nostri
-  # servizi) e non viene mai chiamata: serve solo a forzare le istanze al link.
-  # Ref: https://github.com/esphome/esphome/issues/14470
-  actions:
-    - action: _force_service_arg_types   # stub: non invocare
-      variables:
-        i: int
-        f: float
-        s: string
-      then:
-        - logger.log:
-            format: "link stub i=%d f=%.2f s=%s"
-            args: ["i", "f", "s.c_str()"]
 
 # ── Time ──────────────────────────────────────────────────────────────────
 time:

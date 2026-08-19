@@ -417,42 +417,31 @@ This component was designed from the following consolidated requirement:
 
 ### Linker error: `undefined reference to get_execute_arg_value<int>` / `to_service_arg_type<int>`
 
-**EN** — The Circle registers its HA services from C++ via `register_service()`
-(`custom_services: true`). Since ESPHome PR #9451, the `int`/`float`/`string`
-specializations backing user services are compiled **only** when a YAML `api:`
-action uses those types. With C++-only services the linker can't resolve them
-and the build fails at link time (ESPHome issue
+**EN** — This was caused by the component's HA service handlers declaring their
+integer parameters as C++ `int`. ESPHome's API layer only defines the
+`get_execute_arg_value` / `to_service_arg_type` specializations for `int32_t`,
+`float` and `std::string` — never plain `int`. Even though `int` and `int32_t`
+are the same width on ESP32, they are **distinct template arguments**, so
+`register_service()` with `int` parameters instantiated
+`UserServiceDynamic<int, …>` and the linker had no matching symbols
+(ESPHome issue [#14470](https://github.com/esphome/esphome/issues/14470)).
+
+**Fix (already applied since v1.4)**: all service-handler integer parameters use
+`int32_t` instead of `int`, so the instantiations match the specializations
+ESPHome provides. No YAML workaround is needed. If you write your own
+`register_service()` handlers, use `int32_t` (and `float` / `std::string`) for
+the argument types.
+
+**IT** — L'errore era dovuto agli handler dei servizi HA che dichiaravano i
+parametri interi come `int` C++. Il livello API di ESPHome definisce le
+specializzazioni `get_execute_arg_value` / `to_service_arg_type` solo per
+`int32_t`, `float` e `std::string`, mai per `int`. Pur avendo la stessa
+larghezza su ESP32, `int` e `int32_t` sono **argomenti template distinti**:
+`register_service()` con parametri `int` istanziava `UserServiceDynamic<int, …>`
+senza simboli corrispondenti (issue
 [#14470](https://github.com/esphome/esphome/issues/14470)).
-
-**Fix**: add a never-called stub action to your `api:` block declaring the three
-types. It forces the specializations to be emitted. This is already present in
-`the-circle.yaml`:
-
-```yaml
-api:
-  encryption:
-    key: "..."
-  custom_services: true
-  homeassistant_states: true
-  actions:
-    - action: _force_service_arg_types   # stub: never invoked
-      variables:
-        i: int
-        f: float
-        s: string
-      then:
-        - logger.log:
-            format: "link stub i=%d f=%.2f s=%s"
-            args: ["i", "f", "s.c_str()"]
-```
-
-**IT** — The Circle registra i suoi servizi HA da C++ con `register_service()`
-(`custom_services: true`). Dalla PR #9451 le specializzazioni `int`/`float`/`string`
-dei servizi utente vengono compilate **solo** se un'azione YAML `api:` usa quei
-tipi. Con soli servizi C++ il linker non le trova e la build fallisce al link
-(issue ESPHome [#14470](https://github.com/esphome/esphome/issues/14470)).
-**Soluzione**: aggiungi al blocco `api:` un'azione stub mai chiamata che dichiara
-i tre tipi (già presente in `the-circle.yaml`).
+**Soluzione (già applicata da v1.4)**: tutti i parametri interi degli handler
+usano `int32_t`. Nessun workaround YAML necessario.
 
 ---
 
