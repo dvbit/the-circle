@@ -1,0 +1,9 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+<rect width="200" height="200" rx="12" fill="#1a1a2e"/>
+<circle cx="100" cy="100" r="80" fill="none" stroke="#333355" stroke-width="12"/>
+<rect x="70" y="50" width="60" height="45" rx="5" fill="none" stroke="#33ccff" stroke-width="2"/>
+<text x="100" y="78" text-anchor="middle" fill="#33ccff" font-size="10" font-family="sans-serif">HA</text>
+<circle cx="100" cy="115" r="8" fill="#33ff33" opacity="0.8"/>
+<text x="100" y="150" text-anchor="middle" fill="#33ff33" font-size="11" font-family="sans-serif">home</text>
+<text x="100" y="192" text-anchor="middle" fill="#aaa" font-size="11" font-family="sans-serif">ha presence gate</text>
+</svg>

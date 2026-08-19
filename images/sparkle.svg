@@ -1,0 +1,6 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+<rect width="200" height="200" rx="12" fill="#1a1a2e"/>
+<circle cx="100" cy="100" r="80" fill="none" stroke="#333355" stroke-width="12"/>
+<circle cx="38.5" cy="151.2" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="20.1" cy="104.2" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="178.9" cy="86.6" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="28.3" cy="135.6" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="56.9" cy="167.4" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="114.9" cy="21.4" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="179.5" cy="91.3" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="70.0" cy="174.1" r="8.0" fill="#ffffff" opacity="0.95"/><circle cx="178.6" cy="85.2" r="8.0" fill="#ffffff" opacity="0.95"/><circle cx="25.5" cy="70.8" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="20.1" cy="95.6" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="24.2" cy="125.6" r="8.0" fill="#ffffff" opacity="0.95"/><circle cx="178.8" cy="113.9" r="6.0" fill="#ffffff" opacity="0.95"/><circle cx="78.8" cy="22.9" r="8.0" fill="#ffffff" opacity="0.95"/><circle cx="147.9" cy="35.9" r="8.0" fill="#ffffff" opacity="0.95"/>
+<text x="100" y="192" text-anchor="middle" fill="#aaa" font-size="11" font-family="sans-serif">sparkle</text>
+</svg>

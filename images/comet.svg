@@ -1,0 +1,6 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+<rect width="200" height="200" rx="12" fill="#1a1a2e"/>
+<circle cx="100" cy="100" r="80" fill="none" stroke="#333355" stroke-width="12"/>
+<circle cx="180.0" cy="100.0" r="12.0" fill="#00ffcc" opacity="0.95"/><circle cx="179.7" cy="93.0" r="5.5" fill="#00ffcc" opacity="0.88"/><circle cx="178.8" cy="86.1" r="5.0" fill="#00ffcc" opacity="0.76"/><circle cx="177.3" cy="79.3" r="4.5" fill="#00ffcc" opacity="0.64"/><circle cx="175.2" cy="72.6" r="4.0" fill="#00ffcc" opacity="0.52"/><circle cx="172.5" cy="66.2" r="3.5" fill="#00ffcc" opacity="0.40"/><circle cx="169.3" cy="60.0" r="3.0" fill="#00ffcc" opacity="0.28"/><circle cx="165.5" cy="54.1" r="2.5" fill="#00ffcc" opacity="0.16"/>
+<text x="100" y="192" text-anchor="middle" fill="#aaa" font-size="11" font-family="sans-serif">comet</text>
+</svg>
