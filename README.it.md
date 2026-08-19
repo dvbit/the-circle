@@ -126,6 +126,36 @@ data:
 | `rename_profile` | Rinomina un profilo |
 | `save_profiles` | Salva su flash |
 
+## Risoluzione problemi
+
+### Errore di link: `undefined reference to get_execute_arg_value<int>`
+
+The Circle registra i servizi HA da C++ con `register_service()`
+(`custom_services: true`). Dalla PR ESPHome #9451 le specializzazioni
+`int`/`float`/`string` dei servizi utente vengono compilate **solo** se
+un'azione YAML `api:` usa quei tipi. Con soli servizi C++ il linker non le
+risolve e la build fallisce (issue
+[#14470](https://github.com/esphome/esphome/issues/14470)).
+
+**Soluzione**: aggiungere al blocco `api:` un'azione stub mai chiamata che
+dichiara i tre tipi (già inclusa in `the-circle.yaml`):
+
+```yaml
+api:
+  custom_services: true
+  homeassistant_states: true
+  actions:
+    - action: _force_service_arg_types   # stub: mai invocata
+      variables:
+        i: int
+        f: float
+        s: string
+      then:
+        - logger.log:
+            format: "link stub i=%d f=%.2f s=%s"
+            args: ["i", "f", "s.c_str()"]
+```
+
 ## Licenza
 
 MIT

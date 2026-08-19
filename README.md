@@ -413,6 +413,49 @@ This component was designed from the following consolidated requirement:
 
 ---
 
+## Troubleshooting / Risoluzione problemi
+
+### Linker error: `undefined reference to get_execute_arg_value<int>` / `to_service_arg_type<int>`
+
+**EN** — The Circle registers its HA services from C++ via `register_service()`
+(`custom_services: true`). Since ESPHome PR #9451, the `int`/`float`/`string`
+specializations backing user services are compiled **only** when a YAML `api:`
+action uses those types. With C++-only services the linker can't resolve them
+and the build fails at link time (ESPHome issue
+[#14470](https://github.com/esphome/esphome/issues/14470)).
+
+**Fix**: add a never-called stub action to your `api:` block declaring the three
+types. It forces the specializations to be emitted. This is already present in
+`the-circle.yaml`:
+
+```yaml
+api:
+  encryption:
+    key: "..."
+  custom_services: true
+  homeassistant_states: true
+  actions:
+    - action: _force_service_arg_types   # stub: never invoked
+      variables:
+        i: int
+        f: float
+        s: string
+      then:
+        - logger.log:
+            format: "link stub i=%d f=%.2f s=%s"
+            args: ["i", "f", "s.c_str()"]
+```
+
+**IT** — The Circle registra i suoi servizi HA da C++ con `register_service()`
+(`custom_services: true`). Dalla PR #9451 le specializzazioni `int`/`float`/`string`
+dei servizi utente vengono compilate **solo** se un'azione YAML `api:` usa quei
+tipi. Con soli servizi C++ il linker non le trova e la build fallisce al link
+(issue ESPHome [#14470](https://github.com/esphome/esphome/issues/14470)).
+**Soluzione**: aggiungi al blocco `api:` un'azione stub mai chiamata che dichiara
+i tre tipi (già presente in `the-circle.yaml`).
+
+---
+
 ## License
 
 MIT
