@@ -22,6 +22,8 @@
 #include "esphome/core/preferences.h"
 #include "esphome/components/api/custom_api_device.h"
 #include "esphome/components/light/addressable_light.h"
+#include "esphome/components/output/float_output.h"
+#include "esphome/components/sensor/sensor.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/core/string_ref.h"
 
@@ -69,6 +71,12 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
   // ── JSON export text sensors (set from codegen) ────────────────────────
   void set_profiles_list_sensor(text_sensor::TextSensor *s) { this->profiles_list_sensor_ = s; }
   void set_profile_config_sensor(text_sensor::TextSensor *s) { this->profile_config_sensor_ = s; }
+
+  // ── Local sensor references (set from codegen) ────────────────────────
+  // Ref: Spec – component reads BH1750 and LD2410 directly
+  void set_lux_sensor(sensor::Sensor *s) { this->lux_sensor_ = s; }
+  void set_presence_distance_sensor(sensor::Sensor *s) { this->presence_distance_sensor_ = s; }
+  void set_buzzer_output(output::FloatOutput *o) { this->buzzer_output_ = o; }
 
   // ── Component lifecycle ────────────────────────────────────────────────
 
@@ -197,6 +205,18 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
         "refresh_profiles_list",
         {});
 
+    // Service: the_circle.configure_control_layer(profile, slot, type, param0, entity_id)
+    register_service(
+        &TheCircleComponent::on_configure_control_layer,
+        "configure_control_layer",
+        {"profile", "slot", "type", "param0", "entity_id"});
+
+    // Service: the_circle.clear_control_layer(profile, slot)
+    register_service(
+        &TheCircleComponent::on_clear_control_layer,
+        "clear_control_layer",
+        {"profile", "slot"});
+
     // ── Load saved profiles from flash ────────────────────────────────────
     // Ref: F5 – profiles survive reboot via NVS preferences
     int restored_profile = 0;
@@ -217,7 +237,10 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
 
   /**
    * loop() – called every ~16ms.
-   * Renders active profile onto all strips.
+   * 1. Inject local sensor values into control primitives
+   * 2. Evaluate gates → if blocked, render black
+   * 3. Evaluate triggers (buzzer)
+   * 4. Render visual layers onto strips
    */
   void loop() override {
     uint32_t now = millis();
@@ -228,14 +251,29 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
 
     Profile &active = this->profiles_[this->current_profile_];
 
+    // ── Inject local sensor values into control primitives ───────────
+    inject_sensor_values_(active);
+
+    // ── Evaluate triggers (buzzer) ───────────────────────────────────
+    evaluate_triggers_(active, now);
+
+    // ── Evaluate gates (lux, mmwave, ha_presence) ────────────────────
+    bool gates_allow = active.evaluate_gates();
+
     for (int s = 0; s < MAX_STRIPS; s++) {
       if (this->lights_[s] == nullptr) continue;
 
-      // Render layers into work buffer, then copy to strip
-      render_strip(active, s, this->lights_[s], now,
-                   this->work_buffer_, this->num_leds_[s]);
+      if (gates_allow) {
+        // Normal render: composite visual layers
+        render_strip(active, s, this->lights_[s], now,
+                     this->work_buffer_, this->num_leds_[s]);
+      } else {
+        // Gates blocked: render black
+        for (int i = 0; i < this->num_leds_[s]; i++) {
+          this->lights_[s]->get(i) = Color::BLACK;
+        }
+      }
 
-      // Schedule a write to the physical strip
       this->lights_[s]->schedule_show();
     }
   }
@@ -379,6 +417,138 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
   // ── Rendering ──────────────────────────────────────────────────────────
   Color work_buffer_[MAX_LEDS];
   uint32_t last_render_ms_{0};
+
+  // ── Local sensor references ────────────────────────────────────────────
+  sensor::Sensor *lux_sensor_{nullptr};
+  sensor::Sensor *presence_distance_sensor_{nullptr};
+  output::FloatOutput *buzzer_output_{nullptr};
+
+  // ── Buzzer state ───────────────────────────────────────────────────────
+  bool buzzer_playing_{false};
+  uint32_t buzzer_step_ms_{0};
+  int buzzer_step_{0};
+  int buzzer_preset_{-1};
+
+  // ── RTTTL-style buzzer presets ─────────────────────────────────────────
+  // Each preset is an array of {frequency_hz, duration_ms, pause_ms} triples.
+  // Terminated by {0, 0, 0}.
+  struct BuzzerNote { uint16_t freq; uint16_t dur; uint16_t pause; };
+
+  static const BuzzerNote *get_buzzer_preset(int index) {
+    // Preset 0: notify – 2 short beeps
+    static const BuzzerNote p0[] = {
+        {1000, 80, 80}, {1000, 80, 0}, {0, 0, 0}};
+    // Preset 1: alert – 3 ascending tones
+    static const BuzzerNote p1[] = {
+        {800, 120, 60}, {1000, 120, 60}, {1200, 120, 0}, {0, 0, 0}};
+    // Preset 2: alarm – rapid beeping (6 beeps)
+    static const BuzzerNote p2[] = {
+        {2000, 50, 50}, {2000, 50, 50}, {2000, 50, 50},
+        {2000, 50, 50}, {2000, 50, 50}, {2000, 50, 0}, {0, 0, 0}};
+    // Preset 3: chime – ding-dong
+    static const BuzzerNote p3[] = {
+        {1200, 200, 100}, {900, 300, 0}, {0, 0, 0}};
+    // Preset 4: success – ascending scale
+    static const BuzzerNote p4[] = {
+        {523, 100, 30}, {659, 100, 30}, {784, 100, 30}, {1047, 200, 0}, {0, 0, 0}};
+    // Preset 5: error – descending scale
+    static const BuzzerNote p5[] = {
+        {800, 150, 50}, {600, 150, 50}, {400, 250, 0}, {0, 0, 0}};
+
+    static const BuzzerNote *presets[] = {p0, p1, p2, p3, p4, p5};
+    if (index < 0 || index > 5) return p0;
+    return presets[index];
+  }
+
+  /**
+   * Inject local sensor values into control primitives of the active profile.
+   * - LUX_GATE reads from BH1750 sensor
+   * - MMWAVE_GATE reads from LD2410 detection_distance sensor
+   */
+  void inject_sensor_values_(Profile &profile) {
+    for (int c = 0; c < MAX_CONTROL_LAYERS; c++) {
+      auto &cl = profile.control_layers[c];
+      if (!cl.enabled || !cl.primitive) continue;
+
+      if (cl.primitive->type == PRIM_LUX_GATE && this->lux_sensor_) {
+        cl.primitive->ha_value = this->lux_sensor_->state;
+      }
+      else if (cl.primitive->type == PRIM_MMWAVE_GATE && this->presence_distance_sensor_) {
+        cl.primitive->ha_value = this->presence_distance_sensor_->state;
+      }
+    }
+  }
+
+  /**
+   * Evaluate trigger control primitives (buzzer).
+   * If a buzzer trigger fires, start playing the preset sound.
+   */
+  void evaluate_triggers_(Profile &profile, uint32_t now) {
+    // Check buzzer triggers
+    for (int c = 0; c < MAX_CONTROL_LAYERS; c++) {
+      auto &cl = profile.control_layers[c];
+      if (!cl.enabled || !cl.primitive) continue;
+      if (cl.primitive->type != PRIM_BUZZER) continue;
+
+      if (cl.primitive->evaluate_trigger(now)) {
+        auto *bp = static_cast<BuzzerPrimitive *>(cl.primitive);
+        start_buzzer_preset_(bp->get_sound_preset(), now);
+      }
+    }
+
+    // Continue playing buzzer if active
+    if (this->buzzer_playing_) {
+      play_buzzer_step_(now);
+    }
+  }
+
+  /**
+   * Start playing a buzzer preset.
+   */
+  void start_buzzer_preset_(int preset, uint32_t now) {
+    this->buzzer_preset_ = preset;
+    this->buzzer_step_ = 0;
+    this->buzzer_step_ms_ = now;
+    this->buzzer_playing_ = true;
+    ESP_LOGD("the_circle", "Buzzer: playing preset %d", preset);
+  }
+
+  /**
+   * Step through the buzzer preset sequence.
+   * Uses the LEDC output to generate tones at specified frequencies.
+   */
+  void play_buzzer_step_(uint32_t now) {
+    if (!this->buzzer_output_) {
+      this->buzzer_playing_ = false;
+      return;
+    }
+
+    const BuzzerNote *notes = get_buzzer_preset(this->buzzer_preset_);
+    const BuzzerNote &note = notes[this->buzzer_step_];
+
+    // End of sequence
+    if (note.freq == 0 && note.dur == 0) {
+      this->buzzer_output_->set_level(0.0f);
+      this->buzzer_playing_ = false;
+      return;
+    }
+
+    uint32_t elapsed = now - this->buzzer_step_ms_;
+
+    if (elapsed < note.dur) {
+      // Playing tone
+      // ESPHome LEDC: set_level for volume, frequency is set separately
+      // We approximate by using set_level > 0 for on
+      this->buzzer_output_->set_level(0.5f);
+    } else if (elapsed < note.dur + note.pause) {
+      // In pause between notes
+      this->buzzer_output_->set_level(0.0f);
+    } else {
+      // Move to next note
+      this->buzzer_step_++;
+      this->buzzer_step_ms_ = now;
+    }
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // HA Service handlers
@@ -584,6 +754,57 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
    */
   void on_refresh_profiles_list() {
     publish_profiles_list_();
+  }
+
+  /**
+   * Configure a control layer on a profile.
+   * @param profile  Profile index
+   * @param slot     0=buzzer, 1=lux_gate, 2=mmwave_gate, 3=ha_presence_gate
+   * @param type     Primitive type (14–17)
+   * @param param0   Main parameter (sound preset / lux threshold / distance)
+   * @param entity_id  HA entity for buzzer and ha_presence_gate
+   *
+   * Ref: service the_circle.configure_control_layer
+   */
+  void on_configure_control_layer(int32_t profile, int32_t slot, int32_t type,
+                                   float param0, std::string entity_id) {
+    if (profile < 0 || profile >= this->num_profiles_) return;
+    if (slot < 0 || slot >= MAX_CONTROL_LAYERS) return;
+
+    auto prim_type = static_cast<PrimitiveType>(type);
+    Primitive *prim = create_primitive(prim_type);
+    if (!prim || !prim->is_control()) {
+      ESP_LOGW("the_circle", "Type %d is not a control primitive", (int)type);
+      if (prim) delete prim;
+      return;
+    }
+
+    prim->params[0] = param0;
+
+    // HA binding for buzzer and ha_presence_gate
+    if (!entity_id.empty()) {
+      prim->ha_entity_id = entity_id;
+      prim->ha_bound = true;
+      prim->value_map_min = 0.0f;
+      prim->value_map_max = 1.0f;
+      // Use special coordinates: strip=-1 signals control layer
+      subscribe_to_entity(profile, -1, slot, entity_id);
+    }
+
+    this->profiles_[profile].set_control_layer(slot, prim);
+    ESP_LOGI("the_circle", "Control layer P%d C%d: type=%d param0=%.1f entity=%s",
+             (int)profile, (int)slot, (int)type, param0, entity_id.c_str());
+  }
+
+  /**
+   * Clear a control layer.
+   * Ref: service the_circle.clear_control_layer
+   */
+  void on_clear_control_layer(int32_t profile, int32_t slot) {
+    if (profile < 0 || profile >= this->num_profiles_) return;
+    if (slot < 0 || slot >= MAX_CONTROL_LAYERS) return;
+    this->profiles_[profile].clear_control_layer(slot);
+    ESP_LOGI("the_circle", "Cleared control layer P%d C%d", (int)profile, (int)slot);
   }
 
   // ══════════════════════════════════════════════════════════════════════
@@ -819,15 +1040,30 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
 
       // Resolve primitive from coordinates
       if (b.profile < 0 || b.profile >= this->num_profiles_) continue;
-      auto &ly = this->profiles_[b.profile].layers[b.strip][b.layer];
-      if (!ly.enabled || !ly.primitive) continue;
+
+      Primitive *prim = nullptr;
+      if (b.strip == -1) {
+        // Control layer: strip=-1, layer=control slot index
+        if (b.layer >= 0 && b.layer < MAX_CONTROL_LAYERS) {
+          auto &cl = this->profiles_[b.profile].control_layers[b.layer];
+          if (cl.enabled && cl.primitive) prim = cl.primitive;
+        }
+      } else {
+        // Visual layer
+        if (b.strip >= 0 && b.strip < MAX_STRIPS &&
+            b.layer >= 0 && b.layer < this->layers_per_strip_) {
+          auto &ly = this->profiles_[b.profile].layers[b.strip][b.layer];
+          if (ly.enabled && ly.primitive) prim = ly.primitive;
+        }
+      }
+
+      if (!prim) continue;
 
       // Update the primitive's ha_value
-      ly.primitive->ha_value = val;
-      // Also store raw string for potential future use.
-      // Riusa state_str se già costruita, altrimenti costruiscila una volta.
+      prim->ha_value = val;
+      // Store raw string for potential future use
       if (state_str.empty()) state_str = std::string(state.c_str());
-      ly.primitive->ha_state_str = state_str;
+      prim->ha_state_str = state_str;
     }
   }
 

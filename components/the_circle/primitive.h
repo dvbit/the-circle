@@ -42,6 +42,11 @@ enum PrimitiveType : uint8_t {
   PRIM_SPARKLE,
   PRIM_COMET,
   PRIM_THRESHOLD,
+  // ── Control primitives (non-visual, operate on profile level) ──────
+  PRIM_BUZZER,          // 14 – sound alert triggered by HA entity
+  PRIM_LUX_GATE,        // 15 – blocks profile if lux > threshold
+  PRIM_MMWAVE_GATE,     // 16 – activates profile on mmwave presence
+  PRIM_HA_PRESENCE_GATE, // 17 – activates profile on HA presence entity
   PRIM_MAX
 };
 
@@ -151,6 +156,26 @@ struct Primitive {
    * a primitive only writes the LEDs it "owns", leaving others untouched.
    */
   virtual void render(Color *buffer, int num_leds, uint32_t now_ms) = 0;
+
+  /**
+   * Whether this is a control primitive (non-visual, profile-level).
+   * Control primitives don't render LEDs; they gate/trigger behavior.
+   */
+  virtual bool is_control() const { return false; }
+
+  /**
+   * Evaluate a gate control primitive. Returns true if the profile
+   * should be active (or not blocked). Only meaningful for gate types.
+   * Default: always allow.
+   */
+  virtual bool evaluate_gate() const { return true; }
+
+  /**
+   * Evaluate a trigger control primitive. Called each loop iteration.
+   * Returns true if the trigger fired this cycle.
+   * Default: no trigger.
+   */
+  virtual bool evaluate_trigger(uint32_t now_ms) { return false; }
 
   virtual ~Primitive() = default;
 };
@@ -705,6 +730,153 @@ struct ThresholdPrimitive : Primitive {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Control Primitives (non-visual, profile-level gates/triggers)
+// Stored in control_layers[4] per profile, evaluated before rendering.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * BUZZER – Monitors an HA entity; when value goes from 0→1 (or off→on),
+ * plays a preset sound sequence via RTTTL.
+ *
+ * params[0] = sound preset index (0–5):
+ *   0 = notify  (2 short beeps)
+ *   1 = alert   (3 ascending tones)
+ *   2 = alarm   (rapid beeping)
+ *   3 = chime   (ding-dong)
+ *   4 = success (ascending scale)
+ *   5 = error   (descending scale)
+ *
+ * Binding: ha_entity_id → monitored entity (binary or numeric, triggers on >0.5)
+ *
+ * Note: actual sound playback is handled by TheCircleComponent which holds
+ * the RTTTL output reference. This primitive only signals when to trigger.
+ *
+ * Ref: Spec – "monitora entità HA, quando diventa true esegue sequenza suoni"
+ */
+struct BuzzerPrimitive : Primitive {
+  BuzzerPrimitive() {
+    type = PRIM_BUZZER;
+    params[0] = 0;  // default: notify
+  }
+
+  bool is_control() const override { return true; }
+
+  // No-op render (control primitive doesn't draw LEDs)
+  void render(Color *buffer, int num_leds, uint32_t now_ms) override {}
+
+  /**
+   * Returns true on rising edge: ha_value crosses 0.5 threshold upward.
+   * Resets when value drops back below 0.5.
+   */
+  bool evaluate_trigger(uint32_t now_ms) override {
+    bool active = ha_bound && ha_value >= 0.5f;
+    bool fired = active && !prev_active_;
+    prev_active_ = active;
+    return fired;
+  }
+
+  int get_sound_preset() const { return (int)params[0]; }
+
+ private:
+  bool prev_active_{false};
+};
+
+/**
+ * LUX_GATE – Blocks profile rendering if ambient light exceeds threshold.
+ * Reads directly from the BH1750 sensor on the device.
+ *
+ * params[0] = lux threshold (above this → profile blocked, LEDs off)
+ *
+ * The lux value is injected by TheCircleComponent from the BH1750 sensor.
+ * Stored in ha_value for consistency (even though it's a local sensor).
+ *
+ * Ref: Spec – "monitora luminosità, se superiore a soglia non attiva profilo"
+ */
+struct LuxGatePrimitive : Primitive {
+  LuxGatePrimitive() {
+    type = PRIM_LUX_GATE;
+    params[0] = 500.0f;  // default: block above 500 lux
+  }
+
+  bool is_control() const override { return true; }
+  void render(Color *buffer, int num_leds, uint32_t now_ms) override {}
+
+  /**
+   * Returns true (allow) if lux is below threshold.
+   * ha_value is set by the component from the BH1750 sensor.
+   */
+  bool evaluate_gate() const override {
+    float threshold = params[0];
+    return ha_value < threshold;
+  }
+};
+
+/**
+ * MMWAVE_GATE – Activates profile on mmWave presence, deactivates on absence.
+ * Reads directly from the LD2410 detection_distance sensor.
+ *
+ * params[0] = max detection distance in cm (default 400).
+ *             If detected distance > this, treated as absent.
+ *
+ * The detection distance is injected by TheCircleComponent from the LD2410.
+ * Stored in ha_value.
+ * A value of 0 = no detection = absent.
+ *
+ * Ref: Spec – "attivazione profilo triggerata da presenza mmWave, distanza parametrizzabile"
+ */
+struct MmwaveGatePrimitive : Primitive {
+  MmwaveGatePrimitive() {
+    type = PRIM_MMWAVE_GATE;
+    params[0] = 400.0f;  // default: 400cm max distance
+  }
+
+  bool is_control() const override { return true; }
+  void render(Color *buffer, int num_leds, uint32_t now_ms) override {}
+
+  /**
+   * Returns true (allow) if someone is detected within distance.
+   * ha_value is detection_distance in cm from LD2410 (0 = no detection).
+   */
+  bool evaluate_gate() const override {
+    float max_dist = params[0];
+    // ha_value = detection_distance; 0 means no target
+    if (ha_value <= 0.0f) return false;  // no detection → block
+    return ha_value <= max_dist;          // within range → allow
+  }
+};
+
+/**
+ * HA_PRESENCE_GATE – Like mmwave_gate but driven by an HA entity.
+ * Useful for room occupancy sensors, person tracking, etc.
+ *
+ * Binding: ha_entity_id → presence entity
+ *   - Binary sensor: on=present, off=absent
+ *   - Numeric: >0.5 = present
+ *   - String: "home"/"on"/"true" = present (via map_string_state)
+ *
+ * No params needed (simple on/off gate from HA value).
+ *
+ * Ref: Spec – "stessa funzionalità mmWave ma collegata a entità HA (es. occupazione stanza)"
+ */
+struct HaPresenceGatePrimitive : Primitive {
+  HaPresenceGatePrimitive() {
+    type = PRIM_HA_PRESENCE_GATE;
+  }
+
+  bool is_control() const override { return true; }
+  void render(Color *buffer, int num_leds, uint32_t now_ms) override {}
+
+  /**
+   * Returns true (allow) if HA entity indicates presence.
+   * ha_value is set by the binding system (numeric or mapped string).
+   */
+  bool evaluate_gate() const override {
+    if (!ha_bound) return true;  // no binding → don't block
+    return ha_value >= 0.5f;     // present → allow
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Factory function – creates a Primitive subclass by type enum
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -715,19 +887,23 @@ struct ThresholdPrimitive : Primitive {
  */
 inline Primitive *create_primitive(PrimitiveType type) {
   switch (type) {
-    case PRIM_DOT:       return new DotPrimitive();
-    case PRIM_ARC:       return new ArcPrimitive();
-    case PRIM_TRAIL:     return new TrailPrimitive();
-    case PRIM_SOLID:     return new SolidPrimitive();
-    case PRIM_GRADIENT:  return new GradientPrimitive();
-    case PRIM_SEGMENT:   return new SegmentPrimitive();
-    case PRIM_PULSE:     return new PulsePrimitive();
-    case PRIM_SPIN:      return new SpinPrimitive();
-    case PRIM_RAINBOW:   return new RainbowPrimitive();
-    case PRIM_STROBE:    return new StrobePrimitive();
-    case PRIM_SPARKLE:   return new SparklePrimitive();
-    case PRIM_COMET:     return new CometPrimitive();
-    case PRIM_THRESHOLD: return new ThresholdPrimitive();
+    case PRIM_DOT:              return new DotPrimitive();
+    case PRIM_ARC:              return new ArcPrimitive();
+    case PRIM_TRAIL:            return new TrailPrimitive();
+    case PRIM_SOLID:            return new SolidPrimitive();
+    case PRIM_GRADIENT:         return new GradientPrimitive();
+    case PRIM_SEGMENT:          return new SegmentPrimitive();
+    case PRIM_PULSE:            return new PulsePrimitive();
+    case PRIM_SPIN:             return new SpinPrimitive();
+    case PRIM_RAINBOW:          return new RainbowPrimitive();
+    case PRIM_STROBE:           return new StrobePrimitive();
+    case PRIM_SPARKLE:          return new SparklePrimitive();
+    case PRIM_COMET:            return new CometPrimitive();
+    case PRIM_THRESHOLD:        return new ThresholdPrimitive();
+    case PRIM_BUZZER:           return new BuzzerPrimitive();
+    case PRIM_LUX_GATE:         return new LuxGatePrimitive();
+    case PRIM_MMWAVE_GATE:      return new MmwaveGatePrimitive();
+    case PRIM_HA_PRESENCE_GATE: return new HaPresenceGatePrimitive();
     default:             return nullptr;
   }
 }

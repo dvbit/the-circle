@@ -64,8 +64,12 @@ static const char *const PRIM_TYPE_NAMES[] = {
     "Sparkle",    // 11
     "Comet",      // 12
     "Threshold",  // 13
+    "Buzzer",     // 14
+    "Lux Gate",   // 15
+    "mmWave Gate", // 16
+    "HA Presence Gate", // 17
 };
-static const int NUM_PRIM_TYPE_NAMES = 14;
+static const int NUM_PRIM_TYPE_NAMES = 18;
 
 // ── Strip names for the select dropdown ──────────────────────────────────
 static const char *const STRIP_NAMES[] = {

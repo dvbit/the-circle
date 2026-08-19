@@ -49,6 +49,7 @@ PRIMITIVE_TYPE_OPTIONS = [
     "None", "Dot", "Arc", "Trail", "Solid",
     "Gradient", "Segment", "Pulse", "Spin",
     "Rainbow", "Strobe", "Sparkle", "Comet", "Threshold",
+    "Buzzer", "Lux Gate", "mmWave Gate", "HA Presence Gate",
 ]
 
 CONFIG_SCHEMA = cv.Schema(

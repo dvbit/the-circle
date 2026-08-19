@@ -154,6 +154,10 @@ the_circle:
     - light_id: i_g    # Strip 2: Inner Glow, 111 LEDs
   num_profiles: 10
   layers_per_strip: 6
+  # Local sensor references for control primitives
+  lux_sensor_id: illuminance
+  presence_distance_id: detection_distance
+  buzzer_id: buzzer_output
 
 # ══════════════════════════════════════════════════════════════════════════
 # F6: Layer Editor UI – visible in ESPHome web UI and Home Assistant
@@ -319,6 +323,7 @@ sensor:
   # ── Environment ───────────────────────────────────────────────────────
   - platform: bh1750
     name: "Illuminance"
+    id: illuminance
     update_interval: 10s
   - platform: wifi_signal
     name: "WiFi Signal dB"
@@ -345,6 +350,7 @@ sensor:
       name: Still Energy
     detection_distance:
       name: Detection Distance
+      id: detection_distance
 
 text_sensor:
   - platform: version
