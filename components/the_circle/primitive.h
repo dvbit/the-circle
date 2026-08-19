@@ -245,24 +245,61 @@ struct ArcPrimitive : Primitive {
 };
 
 /**
- * TRAIL – Progress bar from 0° up to a given angle.
- *         Equivalent to ARC with start=0° but semantically "fill from top".
+ * TRAIL – Progress bar from a start angle to an end angle.
+ *         Supports solid color or gradient between two colors.
  *
- * params[0] = end angle (degrees), overridden by mapped_angle() if ha_bound
+ * params[0] = start angle (degrees, default 0 = 12 o'clock)
+ * params[1] = end angle (degrees), overridden by start + mapped_angle() if ha_bound
+ * params[2] = color mode: 0 = solid (colors[0]), 1 = gradient (colors[0] → colors[1])
  *
- * colors[0] = trail color
+ * colors[0] = solid color / gradient start color
+ * colors[1] = gradient end color (only used when params[2] = 1)
+ *
+ * Ref: Spec – "start configurabile, opzione solid o gradiente tra due colori"
  */
 struct TrailPrimitive : Primitive {
   TrailPrimitive() { type = PRIM_TRAIL; }
 
   void render(Color *buffer, int num_leds, uint32_t now_ms) override {
-    float end_angle = ha_bound ? mapped_angle() : params[0];
-    int led_end = angle_to_led(end_angle, num_leds);
-    Color c = effective_color(0);
+    float start_angle = params[0];
+    float end_angle = ha_bound ? (start_angle + mapped_angle()) : params[1];
+    int mode = (int)params[2];  // 0 = solid, 1 = gradient
 
-    // Fill from LED 0 (12-o'clock) to led_end
-    for (int i = 0; i <= led_end && i < num_leds; i++) {
-      buffer[i] = c;
+    int led_start = angle_to_led(start_angle, num_leds);
+    int led_end = angle_to_led(end_angle, num_leds);
+
+    // Calculate span handling wrap-around
+    int span;
+    if (led_end >= led_start) {
+      span = led_end - led_start;
+    } else {
+      span = (num_leds - led_start) + led_end;
+    }
+    if (span == 0) return;
+
+    Color c_start = effective_color(0);
+
+    if (mode == 0) {
+      // Solid mode: fill with single color
+      for (int i = 0; i <= span; i++) {
+        int idx = (led_start + i) % num_leds;
+        buffer[idx] = c_start;
+      }
+    } else {
+      // Gradient mode: interpolate colors[0] → colors[1]
+      Color c_end = Color(
+          (uint8_t)((uint16_t)colors[1].r * intensity / 255),
+          (uint8_t)((uint16_t)colors[1].g * intensity / 255),
+          (uint8_t)((uint16_t)colors[1].b * intensity / 255));
+
+      for (int i = 0; i <= span; i++) {
+        int idx = (led_start + i) % num_leds;
+        float t = (float)i / (float)span;
+        buffer[idx] = Color(
+            (uint8_t)(c_start.r + t * (c_end.r - c_start.r)),
+            (uint8_t)(c_start.g + t * (c_end.g - c_start.g)),
+            (uint8_t)(c_start.b + t * (c_end.b - c_start.b)));
+      }
     }
   }
 };
