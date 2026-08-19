@@ -240,6 +240,27 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
   void set_edit_layer(int v) { edit_layer_ = v; }
   void set_edit_color_index(int v) { edit_color_index_ = v; }
 
+  // ── F6: Profile name accessors ────────────────────────────────────────
+  // Public because they are called by ProfileNameText in ui_entities.cpp.
+  // Ref: F6 Layer Editor UI – profile name text entity.
+
+  /**
+   * Get the name of the profile at the edit cursor.
+   */
+  const char *get_edit_profile_name() {
+    if (edit_profile_ < 0 || edit_profile_ >= num_profiles_) return "";
+    return profiles_[edit_profile_].name;
+  }
+
+  /**
+   * Set the name of the profile at the edit cursor.
+   */
+  void set_edit_profile_name(const std::string &name) {
+    if (edit_profile_ < 0 || edit_profile_ >= num_profiles_) return;
+    profiles_[edit_profile_].set_name(name.c_str());
+    ESP_LOGI("the_circle", "Profile %d renamed to: %s", edit_profile_, name.c_str());
+  }
+
   /**
    * Get the Primitive at the current edit cursor position.
    * Returns nullptr if no primitive is set at that layer.
@@ -458,23 +479,6 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     if (profile < 0 || profile >= this->num_profiles_) return;
     this->profiles_[profile].set_name(name.c_str());
     ESP_LOGI("the_circle", "Profile %d renamed to: %s", profile, name.c_str());
-  }
-
-  /**
-   * Get the name of the profile at the edit cursor.
-   */
-  const char *get_edit_profile_name() {
-    if (edit_profile_ < 0 || edit_profile_ >= num_profiles_) return "";
-    return profiles_[edit_profile_].name;
-  }
-
-  /**
-   * Set the name of the profile at the edit cursor.
-   */
-  void set_edit_profile_name(const std::string &name) {
-    if (edit_profile_ < 0 || edit_profile_ >= num_profiles_) return;
-    profiles_[edit_profile_].set_name(name.c_str());
-    ESP_LOGI("the_circle", "Profile %d renamed to: %s", edit_profile_, name.c_str());
   }
 
   // ══════════════════════════════════════════════════════════════════════
