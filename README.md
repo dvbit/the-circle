@@ -157,13 +157,17 @@ An arc spanning from a start angle to an end angle. Handles wrap-around (e.g. 35
 
 <img src="images/trail.svg" width="120" alt="trail primitive"/>
 
-A progress bar that fills from 0° (12 o'clock) clockwise to a given angle. Ideal for showing percentages.
+A progress bar from a configurable start angle to an end angle. Supports solid color or gradient between two colors. Handles wrap-around (e.g. 300°→60°).
 
 | Param | Field | Description | Default |
 |-------|-------|-------------|---------|
-| End angle | `param0` | Fill up to this angle; if HA-bound, uses mapped_angle | 0 |
+| Start angle | `param0` | Start position in degrees | 0 |
+| End angle | `param1` | End position; if HA-bound, end = start + mapped_angle | 0 |
+| Color mode | `param2` | 0 = solid (`colors[0]`), 1 = gradient (`colors[0]` → `colors[1]`) | 0 |
 
-**Example: Dishwasher progress (0–100% → 0°–360°)**
+When `param2` = 1, set the gradient end color via `set_layer_color` with `color_index: 1`.
+
+**Example 1: Solid dishwasher progress (0–100% → 0°–360°)**
 ```yaml
 - action: esphome.the_circle_configure_layer
   data:
@@ -174,14 +178,45 @@ A progress bar that fills from 0° (12 o'clock) clockwise to a given angle. Idea
     color_r: 0
     color_g: 128
     color_b: 255
-    param0: 0
-    param1: 0
-    param2: 0
+    param0: 0          # start: 0° (12 o'clock)
+    param1: 0          # end: from entity
+    param2: 0          # solid mode
     param3: 0
     entity_id: "sensor.lavastoviglie_program_progress"
     value_min: 0
     value_max: 100
     intensity: 255
+```
+
+**Example 2: Gradient oven progress (green→red, starting at 6 o'clock)**
+```yaml
+- action: esphome.the_circle_configure_layer
+  data:
+    profile: 4
+    strip: 0
+    layer: 0
+    type: 3            # trail
+    color_r: 0         # gradient start: green
+    color_g: 255
+    color_b: 0
+    param0: 180        # start: 180° (6 o'clock)
+    param1: 0          # end: from entity
+    param2: 1          # gradient mode
+    param3: 0
+    entity_id: "sensor.forno_program_progress"
+    value_min: 0
+    value_max: 100
+    intensity: 255
+# Set gradient end color (red)
+- action: esphome.the_circle_set_layer_color
+  data:
+    profile: 4
+    strip: 0
+    layer: 0
+    color_index: 1
+    r: 255
+    g: 0
+    b: 0
 ```
 
 ---
