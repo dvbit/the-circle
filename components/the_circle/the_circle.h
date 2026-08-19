@@ -22,6 +22,7 @@
 #include "esphome/core/preferences.h"
 #include "esphome/components/api/custom_api_device.h"
 #include "esphome/components/light/addressable_light.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/core/string_ref.h"
 
 #include "primitive.h"
@@ -64,6 +65,10 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
 
   void set_num_profiles(int n) { this->num_profiles_ = n; }
   void set_layers_per_strip(int n) { this->layers_per_strip_ = n; }
+
+  // ── JSON export text sensors (set from codegen) ────────────────────────
+  void set_profiles_list_sensor(text_sensor::TextSensor *s) { this->profiles_list_sensor_ = s; }
+  void set_profile_config_sensor(text_sensor::TextSensor *s) { this->profile_config_sensor_ = s; }
 
   // ── Component lifecycle ────────────────────────────────────────────────
 
@@ -180,6 +185,18 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
         "prev_profile",
         {});
 
+    // Service: the_circle.get_profile_config(profile) – export profile as JSON
+    register_service(
+        &TheCircleComponent::on_get_profile_config,
+        "get_profile_config",
+        {"profile"});
+
+    // Service: the_circle.refresh_profiles_list() – export profile overview
+    register_service(
+        &TheCircleComponent::on_refresh_profiles_list,
+        "refresh_profiles_list",
+        {});
+
     // ── Load saved profiles from flash ────────────────────────────────────
     // Ref: F5 – profiles survive reboot via NVS preferences
     int restored_profile = 0;
@@ -190,6 +207,9 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
       // Re-subscribe to HA entities for all loaded bindings
       resubscribe_all_entities_();
     }
+
+    // Publish initial profiles list
+    publish_profiles_list_();
 
     ESP_LOGI("the_circle", "Setup complete, %d profiles, %d layers/strip",
              this->num_profiles_, this->layers_per_strip_);
@@ -332,6 +352,8 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     this->current_profile_ = profile_index;
     ESP_LOGI("the_circle", "Active profile: %d (%s)",
              (int) profile_index, this->profiles_[profile_index].name);
+    // Update profiles list sensor (active index changed)
+    publish_profiles_list_();
   }
 
   /**
@@ -522,6 +544,46 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     if (profile < 0 || profile >= this->num_profiles_) return;
     this->profiles_[profile].set_name(name.c_str());
     ESP_LOGI("the_circle", "Profile %d renamed to: %s", (int) profile, name.c_str());
+    // Update profiles list sensor after rename
+    publish_profiles_list_();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // JSON export service handlers
+  // ══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Service handler: export a specific profile's config as JSON.
+   * Publishes to profile_config_sensor_.
+   *
+   * JSON format (compact, only non-empty layers):
+   * {"p":0,"n":"Clock","a":1,"s":[
+   *   {"i":0,"l":[
+   *     {"i":0,"t":1,"c":[[255,0,0],[0,0,0],[0,0,0],[0,0,0]],
+   *      "p":[0.0,3.0,0.0,0.0,0.0,0.0,0.0,0.0],
+   *      "int":255,"eid":"sensor.x","vn":0.0,"vx":360.0,
+   *      "th":{"on":0,"t1":33.0,"t2":66.0,"c":[[0,255,0],[255,255,0],[255,0,0]]}}
+   *   ]}
+   * ]}
+   */
+  void on_get_profile_config(int32_t profile) {
+    if (profile < 0 || profile >= this->num_profiles_) {
+      ESP_LOGW("the_circle", "get_profile_config: invalid index %d", (int)profile);
+      return;
+    }
+    if (!this->profile_config_sensor_) return;
+
+    std::string json = serialize_profile_(profile);
+    this->profile_config_sensor_->publish_state(json);
+    ESP_LOGD("the_circle", "Published profile %d config (%d bytes)", (int)profile, (int)json.size());
+  }
+
+  /**
+   * Service handler: refresh the profiles overview list.
+   * Publishes to profiles_list_sensor_.
+   */
+  void on_refresh_profiles_list() {
+    publish_profiles_list_();
   }
 
   // ══════════════════════════════════════════════════════════════════════
@@ -767,6 +829,178 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
       if (state_str.empty()) state_str = std::string(state.c_str());
       ly.primitive->ha_state_str = state_str;
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // JSON export text sensors + serialization
+  // ══════════════════════════════════════════════════════════════════════
+
+  text_sensor::TextSensor *profiles_list_sensor_{nullptr};
+  text_sensor::TextSensor *profile_config_sensor_{nullptr};
+
+  /**
+   * Publish the profiles overview list.
+   * JSON: {"active":0,"count":10,"profiles":[{"i":0,"n":"Clock"},...],"leds":[263,132,111]}
+   */
+  void publish_profiles_list_() {
+    if (!this->profiles_list_sensor_) return;
+
+    std::string json = "{\"active\":";
+    json += std::to_string(this->current_profile_);
+    json += ",\"count\":";
+    json += std::to_string(this->num_profiles_);
+    json += ",\"leds\":[";
+    for (int s = 0; s < MAX_STRIPS; s++) {
+      if (s > 0) json += ",";
+      json += std::to_string(this->num_leds_[s]);
+    }
+    json += "],\"profiles\":[";
+    for (int p = 0; p < this->num_profiles_; p++) {
+      if (p > 0) json += ",";
+      json += "{\"i\":";
+      json += std::to_string(p);
+      json += ",\"n\":\"";
+      json += escape_json_(this->profiles_[p].name);
+      json += "\"}";
+    }
+    json += "]}";
+
+    this->profiles_list_sensor_->publish_state(json);
+  }
+
+  /**
+   * Serialize a single profile to compact JSON.
+   * Only includes non-empty layers to save space.
+   */
+  std::string serialize_profile_(int p) {
+    auto &prof = this->profiles_[p];
+    std::string json = "{\"p\":";
+    json += std::to_string(p);
+    json += ",\"n\":\"";
+    json += escape_json_(prof.name);
+    json += "\",\"s\":[";
+
+    for (int s = 0; s < MAX_STRIPS; s++) {
+      if (s > 0) json += ",";
+      json += "{\"i\":";
+      json += std::to_string(s);
+      json += ",\"l\":[";
+
+      bool first_layer = true;
+      for (int l = 0; l < this->layers_per_strip_; l++) {
+        auto &ly = prof.layers[s][l];
+        if (!ly.enabled || !ly.primitive) continue;
+
+        if (!first_layer) json += ",";
+        first_layer = false;
+
+        json += serialize_layer_(l, ly.primitive);
+      }
+      json += "]}";
+    }
+    json += "]}";
+    return json;
+  }
+
+  /**
+   * Serialize a single layer/primitive to JSON.
+   */
+  std::string serialize_layer_(int layer_idx, const Primitive *prim) {
+    std::string json = "{\"i\":";
+    json += std::to_string(layer_idx);
+    json += ",\"t\":";
+    json += std::to_string(prim->type);
+
+    // Colors: [[r,g,b],[r,g,b],[r,g,b],[r,g,b]]
+    json += ",\"c\":[";
+    for (int c = 0; c < MAX_COLORS; c++) {
+      if (c > 0) json += ",";
+      json += "[";
+      json += std::to_string(prim->colors[c].r);
+      json += ",";
+      json += std::to_string(prim->colors[c].g);
+      json += ",";
+      json += std::to_string(prim->colors[c].b);
+      json += "]";
+    }
+    json += "]";
+
+    // Params: [p0,p1,...,p7]
+    json += ",\"p\":[";
+    for (int i = 0; i < 8; i++) {
+      if (i > 0) json += ",";
+      json += to_string_compact_(prim->params[i]);
+    }
+    json += "]";
+
+    // Intensity
+    json += ",\"int\":";
+    json += std::to_string(prim->intensity);
+
+    // HA binding
+    if (prim->ha_bound && !prim->ha_entity_id.empty()) {
+      json += ",\"eid\":\"";
+      json += escape_json_(prim->ha_entity_id);
+      json += "\",\"vn\":";
+      json += to_string_compact_(prim->value_map_min);
+      json += ",\"vx\":";
+      json += to_string_compact_(prim->value_map_max);
+      json += ",\"hv\":";
+      json += to_string_compact_(prim->ha_value);
+    }
+
+    // Threshold
+    json += ",\"th\":{\"on\":";
+    json += prim->threshold.enabled ? "1" : "0";
+    if (prim->threshold.enabled) {
+      json += ",\"t1\":";
+      json += to_string_compact_(prim->threshold.threshold1);
+      json += ",\"t2\":";
+      json += to_string_compact_(prim->threshold.threshold2);
+      json += ",\"c\":[";
+      for (int t = 0; t < 3; t++) {
+        if (t > 0) json += ",";
+        json += "[";
+        json += std::to_string(prim->threshold.colors[t].r);
+        json += ",";
+        json += std::to_string(prim->threshold.colors[t].g);
+        json += ",";
+        json += std::to_string(prim->threshold.colors[t].b);
+        json += "]";
+      }
+      json += "]";
+    }
+    json += "}}";
+
+    return json;
+  }
+
+  /**
+   * Escape a string for JSON (handles quotes and backslashes).
+   */
+  static std::string escape_json_(const std::string &s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+      if (c == '"') out += "\\\"";
+      else if (c == '\\') out += "\\\\";
+      else out += c;
+    }
+    return out;
+  }
+
+  static std::string escape_json_(const char *s) {
+    return escape_json_(std::string(s));
+  }
+
+  /**
+   * Float to compact string (no trailing zeros).
+   */
+  static std::string to_string_compact_(float v) {
+    if (v == (int)v) return std::to_string((int)v);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%.1f", v);
+    return std::string(buf);
   }
 };
 

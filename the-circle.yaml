@@ -352,6 +352,15 @@ text_sensor:
   - platform: wifi_info
     ssid:
       name: WiFi SSID
+  # ── JSON export sensors for The Circle card ──────────────────────────
+  - platform: the_circle
+    the_circle_id: circle
+    profiles_list:
+      name: "Profiles List"
+      icon: mdi:format-list-bulleted
+    profile_config:
+      name: "Profile Config"
+      icon: mdi:code-json
 
 # ── BLE Proxy ─────────────────────────────────────────────────────────────
 esp32_ble_tracker:
