@@ -56,7 +56,7 @@ CONFIG_SCHEMA = cv.Schema(
             cv.ensure_list(STRIP_SCHEMA),
             cv.Length(min=1, max=3),
         ),
-        cv.Optional(CONF_NUM_PROFILES, default=20): cv.int_range(min=1, max=20),
+        cv.Optional(CONF_NUM_PROFILES, default=10): cv.int_range(min=1, max=10),
         cv.Optional(CONF_LAYERS_PER_STRIP, default=6): cv.int_range(min=1, max=8),
     }
 ).extend(cv.COMPONENT_SCHEMA)

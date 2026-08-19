@@ -42,7 +42,7 @@ CONF_PRIMITIVE_TYPE = "primitive_type"
 CONF_ACTIVE_PROFILE = "active_profile"
 
 # Fixed option lists (set at compile time, stored in flash)
-PROFILE_OPTIONS = [f"Profile {i+1}" for i in range(20)]
+PROFILE_OPTIONS = [f"Profile {i+1}" for i in range(10)]
 STRIP_OPTIONS = ["Inner Aura", "Outer Aura", "Inner Glow"]
 LAYER_OPTIONS = [f"Layer {i+1}" for i in range(6)]
 PRIMITIVE_TYPE_OPTIONS = [

@@ -168,6 +168,18 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
         "save_profiles",
         {});
 
+    // Service: the_circle.next_profile() – cycle forward with wrap
+    register_service(
+        &TheCircleComponent::on_next_profile_svc,
+        "next_profile",
+        {});
+
+    // Service: the_circle.prev_profile() – cycle backward with wrap
+    register_service(
+        &TheCircleComponent::on_prev_profile_svc,
+        "prev_profile",
+        {});
+
     // ── Load saved profiles from flash ────────────────────────────────────
     // Ref: F5 – profiles survive reboot via NVS preferences
     int restored_profile = 0;
@@ -320,6 +332,24 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     this->current_profile_ = profile_index;
     ESP_LOGI("the_circle", "Active profile: %d (%s)",
              (int) profile_index, this->profiles_[profile_index].name);
+  }
+
+  /**
+   * Cycle to the next profile. Wraps from last → first.
+   * Ref: Touch Right handler, spec "cycling if reaching profile 1 or 10"
+   */
+  void next_profile() {
+    int next = (this->current_profile_ + 1) % this->num_profiles_;
+    on_set_profile(next);
+  }
+
+  /**
+   * Cycle to the previous profile. Wraps from first → last.
+   * Ref: Touch Left handler, spec "cycling if reaching profile 1 or 10"
+   */
+  void prev_profile() {
+    int prev = (this->current_profile_ - 1 + this->num_profiles_) % this->num_profiles_;
+    on_set_profile(prev);
   }
 
  private:
@@ -476,6 +506,13 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
   void on_save_profiles() {
     save_to_flash(this->profiles_, this->num_profiles_, this->current_profile_);
   }
+
+  /**
+   * Service wrappers for next/prev profile cycling.
+   * Ref: touch left/right handlers, service the_circle.next_profile / prev_profile
+   */
+  void on_next_profile_svc() { this->next_profile(); }
+  void on_prev_profile_svc() { this->prev_profile(); }
 
   /**
    * Rename a profile.

@@ -152,7 +152,7 @@ the_circle:
     - light_id: i_a    # Strip 0: Inner Aura, 263 LEDs
     - light_id: o_a    # Strip 1: Outer Aura, 132 LEDs
     - light_id: i_g    # Strip 2: Inner Glow, 111 LEDs
-  num_profiles: 20
+  num_profiles: 10
   layers_per_strip: 6
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -276,16 +276,32 @@ binary_sensor:
       name: Still Target
 
   # ── Touch pads ────────────────────────────────────────────────────────
+  # Left = previous profile, Right = next profile (cycling at boundaries)
+  # Ref: spec "left and right touch sensor switch between profiles cycling"
   - platform: esp32_touch
     name: "Touch Left"
     id: touch_left
     pin: GPIO12
     threshold: 280
+    on_click:
+      min_length: 50ms
+      max_length: 350ms
+      then:
+        - lambda: |-
+            // Cycle to previous profile (wraps 0 → last)
+            id(circle).prev_profile();
   - platform: esp32_touch
     name: "Touch Right"
     id: touch_right
     pin: GPIO2
     threshold: 180
+    on_click:
+      min_length: 50ms
+      max_length: 350ms
+      then:
+        - lambda: |-
+            // Cycle to next profile (wraps last → 0)
+            id(circle).next_profile();
   - platform: esp32_touch
     name: "Touch OK"
     id: touch_ok

@@ -20,7 +20,7 @@ namespace the_circle {
 
 static const int MAX_STRIPS = 3;
 static const int MAX_LAYERS_DEFAULT = 6;
-static const int MAX_PROFILES_DEFAULT = 20;
+static const int MAX_PROFILES_DEFAULT = 10;
 static const int PROFILE_NAME_LEN = 16;
 
 /**
