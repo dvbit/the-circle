@@ -22,7 +22,7 @@ esphome:
   # Ref: https://esphome.io/components/esphome/ (project: name/version)
   project:
     name: "dvbit.the-circle"
-    version: "1.4"
+    version: "1.5"
 
 esp32:
   board: esp32dev

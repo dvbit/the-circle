@@ -313,12 +313,12 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
   // to_service_arg_type solo per <int32_t>, non <int>. Vedi README.
   void on_set_profile(int32_t profile_index) {
     if (profile_index < 0 || profile_index >= this->num_profiles_) {
-      ESP_LOGW("the_circle", "Invalid profile index %d", profile_index);
+      ESP_LOGW("the_circle", "Invalid profile index %d", (int) profile_index);
       return;
     }
     this->current_profile_ = profile_index;
     ESP_LOGI("the_circle", "Active profile: %d (%s)",
-             profile_index, this->profiles_[profile_index].name);
+             (int) profile_index, this->profiles_[profile_index].name);
   }
 
  private:
@@ -356,7 +356,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     auto prim_type = static_cast<PrimitiveType>(type);
     Primitive *prim = create_primitive(prim_type);
     if (!prim) {
-      ESP_LOGW("the_circle", "Unknown primitive type %d", type);
+      ESP_LOGW("the_circle", "Unknown primitive type %d", (int) type);
       return;
     }
 
@@ -368,7 +368,8 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     prim->params[2] = param2;
     prim->params[3] = param3;
     // Set intensity
-    prim->intensity = (uint8_t)std::min(255, std::max(0, intensity));
+    prim->intensity =
+        (uint8_t) std::min<int32_t>(255, std::max<int32_t>(0, intensity));
 
     // Install into profile (transfers ownership, deletes old primitive)
     this->profiles_[profile].set_layer(strip, layer, prim);
@@ -383,7 +384,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     }
 
     ESP_LOGI("the_circle", "Configured P%d S%d L%d: type=%d entity=%s",
-             profile, strip, layer, type, entity_id.c_str());
+             (int) profile, (int) strip, (int) layer, (int) type, entity_id.c_str());
   }
 
   /**
@@ -432,7 +433,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     // Remove bindings before clearing the layer
     remove_bindings_for(profile, strip, layer);
     this->profiles_[profile].clear_layer(strip, layer);
-    ESP_LOGI("the_circle", "Cleared P%d S%d L%d", profile, strip, layer);
+    ESP_LOGI("the_circle", "Cleared P%d S%d L%d", (int) profile, (int) strip, (int) layer);
   }
 
   /**
@@ -446,7 +447,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
 
     auto &ly = this->profiles_[profile].layers[strip][layer];
     if (!ly.primitive) {
-      ESP_LOGW("the_circle", "No primitive at P%d S%d L%d", profile, strip, layer);
+      ESP_LOGW("the_circle", "No primitive at P%d S%d L%d", (int) profile, (int) strip, (int) layer);
       return;
     }
 
@@ -463,7 +464,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
     }
 
     ESP_LOGI("the_circle", "Bound P%d S%d L%d -> %s [%.1f, %.1f]",
-             profile, strip, layer, entity_id.c_str(), value_min, value_max);
+             (int) profile, (int) strip, (int) layer, entity_id.c_str(), value_min, value_max);
   }
 
   /**
@@ -482,7 +483,7 @@ class TheCircleComponent : public Component, public api::CustomAPIDevice {
   void on_rename_profile(int32_t profile, std::string name) {
     if (profile < 0 || profile >= this->num_profiles_) return;
     this->profiles_[profile].set_name(name.c_str());
-    ESP_LOGI("the_circle", "Profile %d renamed to: %s", profile, name.c_str());
+    ESP_LOGI("the_circle", "Profile %d renamed to: %s", (int) profile, name.c_str());
   }
 
   // ══════════════════════════════════════════════════════════════════════
