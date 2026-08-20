@@ -22,7 +22,7 @@ esphome:
   # Ref: https://esphome.io/components/esphome/ (project: name/version)
   project:
     name: "dvbit.the-circle"
-    version: "1.6"
+    version: "1.7"
 
 esp32:
   board: esp32dev
@@ -132,14 +132,21 @@ light:
     color_correct: [0.6, 0.6, 0.6]
 
   # ── Inner Glow (SK6812 RGBW, 111 LEDs) ──────────────────────────────
-  - platform: neopixelbus
-    type: GRBW
-    icon: 'mdi:radiobox-blank'
-    pin: GPIO26
-    variant: SK6812
-    num_leds: ${i_g_n_l}
-    name: "Inner Glow"
+  # Clockless SK6812 → esp32_rmt_led_strip (driver RMT5 moderno).
+  # neopixelbus è DEPRECATO su ESP32 (RMT legacy, timing fragile; rimozione
+  # ≤ 2027.1). Percorso ufficiale per clockless WS2812/SK6812.
+  # Ref: https://esphome.io/components/light/esp32_rmt_led_strip/
+  # Mappatura da neopixelbus: type:GRBW + variant:SK6812  →
+  #   chipset:SK6812 + rgb_order:GRB + is_rgbw:true
+  - platform: esp32_rmt_led_strip
     id: i_g
+    icon: 'mdi:radiobox-blank'
+    name: "Inner Glow"
+    pin: GPIO26
+    num_leds: ${i_g_n_l}
+    chipset: SK6812         # preset timing SK6812
+    rgb_order: GRB          # GRBW: ordine GRB + canale bianco dedicato
+    is_rgbw: true           # abilita il 4° canale (W)
     default_transition_length: 0s
     color_correct: [0.6, 0.6, 0.6]
 
