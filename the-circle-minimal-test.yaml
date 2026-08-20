@@ -1,0 +1,115 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# The Circle — MINIMAL TEST firmware (diagnostica hardware)
+# ═══════════════════════════════════════════════════════════════════════════
+# Scopo: isolare il cross-coupling tra strip. NESSUN componente the_circle,
+# nessun touch, nessun sensore, nessun BLE. Solo le 3 strip come luci ESPHome
+# standard, controllabili da HA/web UI.
+#
+# ── ESITO DEL TEST (2026-08) ────────────────────────────────────────────────
+# Con questo firmware minimale il cross-coupling PERSISTE: accendendo solo
+# Inner Aura, anche Outer Aura si illumina con un colore simile.
+# CONCLUSIONE: il problema è HARDWARE (linee dati accoppiate), NON il
+# componente the_circle. Da verificare: short/ponte tra le linee dati/clock
+# Inner (GPIO16/17) e Outer (GPIO19/18) su connettori, saldature o cablaggio.
+# Conservato in repo per ri-eseguire il test dopo interventi hardware.
+#
+# TEST: accendi UNA strip alla volta (web UI/HA). Se un'altra si accende
+# comunque → accoppiamento hardware ancora presente.
+#
+#   Inner Aura: data GPIO16, clock GPIO17  (SK9822)
+#   Outer Aura: data GPIO19, clock GPIO18  (APA102)
+#   Inner Glow: data GPIO26               (SK6812 RGBW, clockless RMT)
+# ═══════════════════════════════════════════════════════════════════════════
+
+substitutions:
+  i_a_n_l: "263"    # Inner Aura LED count
+  o_a_n_l: "132"    # Outer Aura LED count
+  i_g_n_l: "111"    # Inner Glow LED count
+
+esphome:
+  name: the-circle
+  friendly_name: The Circle
+  project:
+    name: "dvbit.the-circle-minimal"
+    version: "test-1"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# ── Network ───────────────────────────────────────────────────────────────
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.2.172
+    gateway: 192.168.2.1
+    subnet: 255.255.255.0
+    dns1: 192.168.2.1
+  ap:
+    ssid: "TheCircle AP"
+    password: !secret wifi_password
+
+captive_portal:
+
+logger:
+  level: INFO
+
+web_server:
+  port: 80
+  version: 3
+
+api:
+  encryption:
+    key: "fpH+HCqYyRJ7D14B3IEmKf9YrDrzIEhtMQ9ppbu6N14="
+
+ota:
+  - platform: esphome
+    password: "toorapi"
+
+# ══════════════════════════════════════════════════════════════════════════
+# LED Strips — plain ESPHome lights, NO custom component.
+# Each is fully independent and controllable from the web UI / HA.
+# Data & clock pins IDENTICAL to the full configuration.
+# ══════════════════════════════════════════════════════════════════════════
+
+light:
+  # ── Inner Aura (SK9822, 263 LEDs) ─────────────────────────────────────
+  - platform: fastled_spi
+    id: i_a
+    icon: 'mdi:circle-double'
+    chipset: SK9822
+    data_pin: GPIO16
+    clock_pin: GPIO17
+    num_leds: ${i_a_n_l}
+    rgb_order: BGR
+    name: "Inner Aura"
+    default_transition_length: 0s
+    color_correct: [0.4, 0.4, 0.4]
+
+  # ── Outer Aura (APA102, 132 LEDs) ────────────────────────────────────
+  - platform: fastled_spi
+    id: o_a
+    icon: 'mdi:circle'
+    chipset: APA102
+    data_pin: GPIO19
+    clock_pin: GPIO18
+    num_leds: ${o_a_n_l}
+    rgb_order: BGR
+    name: "Outer Aura"
+    default_transition_length: 0s
+    color_correct: [0.4, 0.4, 0.4]
+
+  # ── Inner Glow (SK6812 RGBW, 111 LEDs) ──────────────────────────────
+  - platform: esp32_rmt_led_strip
+    id: i_g
+    icon: 'mdi:radiobox-blank'
+    name: "Inner Glow"
+    pin: GPIO26
+    num_leds: ${i_g_n_l}
+    chipset: SK6812
+    rgb_order: GRB
+    is_rgbw: true
+    default_transition_length: 0s
+    color_correct: [0.4, 0.4, 0.4]

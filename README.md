@@ -836,6 +836,7 @@ the-circle/
 ├── README.md                               # This file
 ├── README.it.md                            # Italian documentation
 ├── the-circle.yaml                         # ESPHome config example
+├── the-circle-minimal-test.yaml            # Hardware isolation test (strips only, no component)
 ├── ha_package_the_circle.yaml              # HA package (templates + presets)
 ├── hacs.json                               # HACS metadata
 ├── images/                                 # Primitive illustrations
