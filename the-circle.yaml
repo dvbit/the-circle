@@ -22,7 +22,7 @@ esphome:
   # Ref: https://esphome.io/components/esphome/ (project: name/version)
   project:
     name: "dvbit.the-circle"
-    version: "1.8"
+    version: "1.9"
 
 esp32:
   board: esp32dev
@@ -116,7 +116,12 @@ light:
     rgb_order: BGR
     name: "Inner Aura"
     default_transition_length: 0s
-    color_correct: [0.8, 0.8, 0.8]
+    # LIMITAZIONE CORRENTE (stopgap): color_correct scala ogni canale, quindi
+    # riduce ~linearmente l'assorbimento. Abbassato 0.8→0.4 per evitare
+    # brownout/hang su fill pieni. Alza gradualmente se la corrente lo permette.
+    # NB: non è un vero limite in ampere (ESPHome non lo espone) — la soluzione
+    # definitiva è l'iniezione di alimentazione sul nastro.
+    color_correct: [0.4, 0.4, 0.4]
 
   # ── Outer Aura (APA102, 132 LEDs) ────────────────────────────────────
   - platform: fastled_spi
@@ -129,7 +134,8 @@ light:
     rgb_order: BGR
     name: "Outer Aura"
     default_transition_length: 0s
-    color_correct: [0.6, 0.6, 0.6]
+    # LIMITAZIONE CORRENTE (stopgap): vedi Inner Aura. 0.6→0.4.
+    color_correct: [0.4, 0.4, 0.4]
 
   # ── Inner Glow (SK6812 RGBW, 111 LEDs) ──────────────────────────────
   # Clockless SK6812 → esp32_rmt_led_strip (driver RMT5 moderno).
@@ -148,7 +154,8 @@ light:
     rgb_order: GRB          # GRBW: ordine GRB + canale bianco dedicato
     is_rgbw: true           # abilita il 4° canale (W)
     default_transition_length: 0s
-    color_correct: [0.6, 0.6, 0.6]
+    # LIMITAZIONE CORRENTE (stopgap): vedi Inner Aura. 0.6→0.4.
+    color_correct: [0.4, 0.4, 0.4]
 
 # ══════════════════════════════════════════════════════════════════════════
 # The Circle Component
@@ -271,9 +278,12 @@ output:
 rtttl:
   output: buzzer_output
 
-# ── Capacitive touch ─────────────────────────────────────────────────────
-esp32_touch:
-  setup_mode: False
+# ── Capacitive touch DISABILITATO ────────────────────────────────────────
+# Touch commentato temporaneamente (interferenze/chatter in indagine).
+# Riabilitare esp32_touch: + i 4 binary_sensor esp32_touch per ripristinare
+# la navigazione profili via touch (Left/Right → prev/next_profile).
+# esp32_touch:
+#   setup_mode: False
 
 binary_sensor:
   # ── Presence ──────────────────────────────────────────────────────────
@@ -289,53 +299,53 @@ binary_sensor:
   # ── Touch pads ────────────────────────────────────────────────────────
   # Left = previous profile, Right = next profile (cycling at boundaries)
   # Ref: spec "left and right touch sensor switch between profiles cycling"
-  - platform: esp32_touch
-    name: "Touch Left"
-    id: touch_left
-    pin: GPIO12
-    threshold: 280
-    on_click:
-      min_length: 50ms
-      max_length: 350ms
-      then:
-        - lambda: |-
-            // Cycle to previous profile (wraps 0 → last)
-            id(circle).prev_profile();
-  - platform: esp32_touch
-    name: "Touch Right"
-    id: touch_right
-    pin: GPIO2
+#   - platform: esp32_touch
+#     name: "Touch Left"
+#     id: touch_left
+#     pin: GPIO12
+#     threshold: 280
+#     on_click:
+#       min_length: 50ms
+#       max_length: 350ms
+#       then:
+#         - lambda: |-
+#             // Cycle to previous profile (wraps 0 → last)
+#             id(circle).prev_profile();
+#   - platform: esp32_touch
+#     name: "Touch Right"
+#     id: touch_right
+#     pin: GPIO2
     # MITIGAZIONE chatter: il valore a riposo (~180-210) sedeva sopra la soglia
     # 180 e il rumore scendeva sotto → trigger fantasma continui. Alzata a 235
     # (sopra il rumore a riposo; un tocco reale scende a ~25-68). delayed_on_off
     # filtra i picchi brevi. NB: usare delayed_on_off (combinato), non
     # delayed_on + delayed_off separati (non debouncano correttamente, #463).
-    threshold: 235
-    filters:
-      - delayed_on_off: 20ms
-    on_click:
-      min_length: 50ms
-      max_length: 350ms
-      then:
-        - lambda: |-
-            // Cycle to next profile (wraps last → 0)
-            id(circle).next_profile();
-  - platform: esp32_touch
-    name: "Touch OK"
-    id: touch_ok
-    pin: GPIO15
+#     threshold: 235
+#     filters:
+#       - delayed_on_off: 20ms
+#     on_click:
+#       min_length: 50ms
+#       max_length: 350ms
+#       then:
+#         - lambda: |-
+#             // Cycle to next profile (wraps last → 0)
+#             id(circle).next_profile();
+#   - platform: esp32_touch
+#     name: "Touch OK"
+#     id: touch_ok
+#     pin: GPIO15
     # MITIGAZIONE chatter (come Touch Right): soglia 180 dentro il rumore a
     # riposo (~180-210). Alzata a 235 + debounce. Tocco reale scende a ~68.
-    threshold: 235
-    filters:
-      - delayed_on_off: 20ms
-  - platform: esp32_touch
-    name: "Touch Esc"
-    id: touch_esc
+#     threshold: 235
+#     filters:
+#       - delayed_on_off: 20ms
+#   - platform: esp32_touch
+#     name: "Touch Esc"
+#     id: touch_esc
     # FIX conflitto pin: GPIO27 è il tx_pin dell'UART LD2410. Spostato su
     # GPIO13 (touch T4), libero e touch-capable. Pad healthy (riposo ~492).
-    pin: GPIO13
-    threshold: 300
+#     pin: GPIO13
+#     threshold: 300
   - platform: status
     name: Status
 
