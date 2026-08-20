@@ -856,6 +856,41 @@ the-circle/
 
 ---
 
+### Capacitive touch: phantom triggers / stuck-on pads
+
+**EN** — On ESP32 classic a pad reads *touched* when its raw value drops **below**
+the threshold. If a pad's resting (untouched) value sits close to its threshold
+and the noise band dips below it, the pad fires on its own (chatter / stuck ON).
+Fix by calibrating: set `esp32_touch: setup_mode: true`, reflash, and read each
+pad's raw value in the VERBOSE device log (untouched vs touched). Choose a
+threshold safely between the two, then set `setup_mode: false`. For weakly
+coupled pads, add a `delayed_on_off` debounce filter. Example (as shipped for
+Touch Right / OK, whose resting value sat on the old threshold of 180):
+
+```yaml
+  - platform: esp32_touch
+    name: "Touch Right"
+    pin: GPIO2
+    threshold: 235          # above resting noise; a real touch drops far lower
+    filters:
+      - delayed_on_off: 20ms # combined filter — NOT delayed_on + delayed_off
+```
+
+If a pad still chatters after calibration, its raw swing (untouched → touched)
+is too small: that's a hardware issue (pad size, trace length, ground
+reference), not something a threshold can fix.
+
+**IT** — Su ESP32 classic un pad risulta *toccato* quando il valore raw scende
+**sotto** la soglia. Se il valore a riposo è vicino alla soglia e il rumore
+scende sotto, il pad scatta da solo (chatter / bloccato ON). Calibra con
+`esp32_touch: setup_mode: true`, reflash, leggi i valori raw nel log VERBOSE
+(a riposo vs toccato), scegli una soglia in mezzo, poi `setup_mode: false`.
+Per pad con accoppiamento debole aggiungi il filtro `delayed_on_off`. Se il
+chatter persiste dopo la calibrazione, l'escursione raw è troppo piccola →
+problema hardware, non risolvibile via soglia.
+
+---
+
 ## License
 
 MIT

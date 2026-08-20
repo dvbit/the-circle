@@ -22,7 +22,7 @@ esphome:
   # Ref: https://esphome.io/components/esphome/ (project: name/version)
   project:
     name: "dvbit.the-circle"
-    version: "1.7"
+    version: "1.8"
 
 esp32:
   board: esp32dev
@@ -305,7 +305,14 @@ binary_sensor:
     name: "Touch Right"
     id: touch_right
     pin: GPIO2
-    threshold: 180
+    # MITIGAZIONE chatter: il valore a riposo (~180-210) sedeva sopra la soglia
+    # 180 e il rumore scendeva sotto → trigger fantasma continui. Alzata a 235
+    # (sopra il rumore a riposo; un tocco reale scende a ~25-68). delayed_on_off
+    # filtra i picchi brevi. NB: usare delayed_on_off (combinato), non
+    # delayed_on + delayed_off separati (non debouncano correttamente, #463).
+    threshold: 235
+    filters:
+      - delayed_on_off: 20ms
     on_click:
       min_length: 50ms
       max_length: 350ms
@@ -317,11 +324,17 @@ binary_sensor:
     name: "Touch OK"
     id: touch_ok
     pin: GPIO15
-    threshold: 180
+    # MITIGAZIONE chatter (come Touch Right): soglia 180 dentro il rumore a
+    # riposo (~180-210). Alzata a 235 + debounce. Tocco reale scende a ~68.
+    threshold: 235
+    filters:
+      - delayed_on_off: 20ms
   - platform: esp32_touch
     name: "Touch Esc"
     id: touch_esc
-    pin: GPIO27
+    # FIX conflitto pin: GPIO27 è il tx_pin dell'UART LD2410. Spostato su
+    # GPIO13 (touch T4), libero e touch-capable. Pad healthy (riposo ~492).
+    pin: GPIO13
     threshold: 300
   - platform: status
     name: Status
